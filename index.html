@@ -1,0 +1,949 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>语言加密器（完美单音+词组撤回版）</title>
+<style>
+  :root {
+    --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --sub: #94a3b8;
+    --primary: #0ea5e9; --success: #22c55e; --danger: #f87171;
+    --border: #334155; --input-bg: #0b1220;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+    display: flex; justify-content: center; padding: 20px;
+  }
+  .app { width: 100%; max-width: 760px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  .sub { color: var(--sub); font-size: 14px; margin-bottom: 20px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px; }
+  label { display: block; font-size: 14px; color: #cbd5e1; margin: 12px 0 6px; }
+  textarea, input {
+    width: 100%; border: 1px solid var(--border); background: var(--input-bg);
+    color: #f8fafc; border-radius: 10px; padding: 12px; font-size: 15px; outline: none;
+  }
+  textarea { min-height: 120px; resize: vertical; line-height: 1.8; font-family: monospace, sans-serif; }
+  input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(14,165,233,.15); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  button {
+    border: 0; border-radius: 10px; padding: 10px 14px; font-size: 14px;
+    font-weight: 600; cursor: pointer; background: #334155; color: #f8fafc; transition: .15s;
+  }
+  button:hover { background: #475569; }
+  button.primary { background: var(--primary); color: white; }
+  button.primary:hover { background: #0284c7; }
+  button.success { background: var(--success); color: #052e16; }
+  button.success:hover { background: #16a34a; }
+  button.danger { background: #7f1d1d; color: #fca5a5; }
+  button.danger:hover { background: #991b1b; }
+  button.info { background: #4c1d95; color: #ddd6fe; }
+  button.info:hover { background: #5b21b6; }
+  button.undo { background: #b45309; color: #fef3c7; }
+  button.undo:hover { background: #92400e; }
+  .status { min-height: 22px; margin-top: 12px; font-size: 14px; color: var(--sub); }
+  .status.error { color: var(--danger); }
+  .status.ok { color: var(--success); }
+  .output-box {
+    margin-top: 10px; padding: 12px; border: 1px dashed var(--border); border-radius: 10px;
+    background: var(--input-bg); min-height: 80px; font-size: 16px; line-height: 1.8; word-break: break-all;
+  }
+  .clickable-char { cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background 0.2s; color: #fca5a5; }
+  .clickable-char:hover { background: #334155; color: #f8fafc; }
+  .corrected-char { color: #4ade80; } 
+  #errorLog { color: #fca5a5; font-size: 12px; margin-top: 10px; display: none; }
+</style>
+</head>
+<body>
+<div id="errorLog"></div>
+
+<div class="app">
+  <h1>🔐 语言加密器</h1>
+  <div class="sub">自然码双拼 → 声调箭头 → 键盘符号 → 全能词组记忆</div>
+  
+  <div class="card">
+    <label for="inputText">输入原文（中文）或密文</label>
+    <textarea id="inputText" placeholder="输入中文进行加密，或粘贴密文进行解密..."></textarea>
+    
+    <div class="row">
+      <button class="primary" onclick="encryptText()">加密</button>
+      <button class="success" onclick="decryptText()">解密</button>
+      <button onclick="copyResult()">复制结果</button>
+      <button class="undo" onclick="undoLast()">↩️ 撤回上一步</button>
+      <button class="danger" onclick="clearAll()">清空</button>
+    </div>
+
+    <label>结果（点击<span style="color:#fca5a5;">红色字</span>可纠正，纠正后变绿）</label>
+    <div id="outputText" class="output-box"></div>
+    <div id="status" class="status"></div>
+
+    <div class="row" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;">
+      <button class="info" onclick="exportMemory()">📤 导出记忆库</button>
+      <button class="info" onclick="importMemory()">📥 导入记忆库</button>
+      <button class="danger" onclick="clearMemory()">🗑️ 清空记忆库</button>
+    </div>
+    <div style="font-size: 12px; color: #94a3b8; margin-top: 8px;">
+      💡 提示：点击红字后，可以输入任意长度的词组。如果改错了，点击“撤回上一步”即可恢复。
+    </div>
+  </div>
+</div>
+
+<script>
+// ================= 崩溃诊断 =================
+window.onerror = function(msg, url, lineNo) {
+    const log = document.getElementById('errorLog');
+    if (log) {
+        log.style.display = 'block';
+        log.innerHTML = '⚠️ 网页代码出错啦！<br>错误信息：' + msg + '<br>行号：' + lineNo + '<br>请截图给开发者。';
+    }
+    return false; 
+};
+
+// ==========================================
+// 1. 核心映射表
+// ==========================================
+const zrmInitialMap = { 'b':'b', 'p':'p', 'm':'m', 'f':'f', 'd':'d', 't':'t', 'n':'n', 'l':'l', 'g':'g', 'k':'k', 'h':'h', 'j':'j', 'q':'q', 'x':'x', 'r':'r', 'z':'z', 'c':'c', 's':'s', 'y':'y', 'w':'w', 'zh':'v', 'ch':'i', 'sh':'u' };
+const reverseInitialMap = {}; for (const [k, v] of Object.entries(zrmInitialMap)) reverseInitialMap[v] = k;
+
+const zrmVowelMap = {
+  'a':'a', 'o':'o', 'e':'e', 'i':'i', 'u':'u', 'v':'v',
+  'ai':'l', 'ei':'z', 'ui':'v', 'ao':'k', 'ou':'b', 'iu':'q',
+  'ie':'x', 've':'t', 'an':'j', 'en':'f', 'in':'n', 'un':'p', 'vn':'p',
+  'ang':'h', 'eng':'g', 'ing':'y', 'ong':'s', 'ia':'w', 'iao':'c', 'ian':'m', 'iang':'d', 'iong':'s',
+  'ua':'w', 'uo':'o', 'uai':'y', 'uan':'r', 'uang':'d', 'ue':'t', 'uan':'r', 'van':'r'
+};
+const reverseVowelMap = {}; for (const [k, v] of Object.entries(zrmVowelMap)) { if (!reverseVowelMap[v]) reverseVowelMap[v] = []; reverseVowelMap[v].push(k); }
+
+const keyboardMap = { 'q':'１','w':'２','e':'３','r':'４','t':'５','y':'６','u':'７','i':'８','o':'９','p':'０','a':'～','s':'＠','d':'＃','f':'！','g':'％','h':'＆','j':'＊','k':'（','l':'）','z':'｀','x':'／','c':'－','v':'＿','b':'：','n':'；','m':'？' };
+const reverseKeyboardMap = {}; for (const [k, v] of Object.entries(keyboardMap)) reverseKeyboardMap[v] = k;
+
+const toneMap = { 1:'→', 2:'↑', 3:'←', 4:'↓', 5:'\\' };
+const reverseToneMap = { '→':1, '↑':2, '←':3, '↓':4, '\\':5 };
+
+const punctPlaceholder = { '，': '\uE000', '。': '\uE001', '！': '\uE002', '？': '\uE003', '；': '\uE004', '：': '\uE005', '、': '\uE006', '“': '\uE007', '”': '\uE008', '‘': '\uE009', '’': '\uE00A', '（': '\uE00B', '）': '\uE00C', '【': '\uE00D', '】': '\uE00E', '《': '\uE00F', '》': '\uE010', ' ': '\uE011', '\n': '\uE012' };
+const reversePunctPlaceholder = {}; for (const [k, v] of Object.entries(punctPlaceholder)) reversePunctPlaceholder[v] = k;
+
+// ==========================================
+// 2. 拼音字典
+// ==========================================
+const pinyinDict = {
+  'de5': ['的', '得', '地'], 'le5': ['了'], 'shi4': ['是', '事', '市'], 'zai4': ['再', '在'],
+  'bu4': ['不'], 'ren2': ['人'], 'you3': ['有', '友'], 'wo3': ['我'], 'ta1': ['他', '她', '它'],
+  'zhe4': ['这', '着'], 'ge4': ['个', '各'], 'men5': ['们'], 'lai2': ['来'], 'dao4': ['到', '道'],
+  'shi2': ['时', '十', '实'], 'da4': ['大', '达'], 'di4': ['地', '第'], 'wei4': ['为', '位', '未'],
+  'zi4': ['子', '字', '自'], 'ni3': ['你'], 'hao3': ['好'], 'ma5': ['吗', '嘛'], 'ne5': ['呢'], 'a5': ['啊', '呀'],
+  'jin1': ['今', '金', '斤', '津', '巾'], 'wan3': ['晚', '碗', '挽', '婉'],
+  'yue4': ['月', '越', '阅', '悦', '跃'], 'se4': ['色', '涩', '瑟'],
+  'zhen1': ['真', '珍', '针', '侦', '贞'], 'mei3': ['美', '每', '镁'],
+  'mo4': ['末'], 'luo2': ['锣', '落', '罗'], 'sheng1': ['声', '生', '升'],
+  'xie1': ['歇', '些'], 'suo3': ['唢', '索', '锁'], 'na4': ['呐', '那', '纳'],
+  'xiang3': ['响', '想', '享'], 'bian1': ['鞭', '边', '编'], 'pao4': ['炮', '泡'],
+  'juan3': ['卷'], 'qi3': ['起', '企', '启'], 'yan1': ['烟', '言', '研'],
+  'reng2': ['仍'], 'rao4': ['绕'], 'liang2': ['梁', '粮', '良'], 'jian4': ['见', '间', '件'],
+  'man3': ['满'], 'tian1': ['天'], 'hui1': ['灰', '挥', '辉'], 'jin4': ['尽', '进', '烬'],
+  'piao1': ['飘', '漂'], 'dang4': ['荡', '当'], 'ci2': ['慈', '词'], 'xiang2': ['祥', '详'],
+  'lian3': ['脸', '连', '联'], 'pang2': ['庞', '旁'], 'guo4': ['过'], 'wai4': ['外'],
+  'po2': ['婆'], 'ye3': ['也'], 'bi4': ['必', '比', '笔'], 'tai4': ['太', '态'],
+  'qian1': ['牵', '千', '迁'], 'chang2': ['长', '场', '常', '肠'], 'yi3': ['已', '以'],
+  'ba3': ['把'], 'hui2': ['回'], 'yi4': ['忆', '意', '义'], 'nian3': ['捻', '念'],
+  'zuo4': ['作', '做', '坐'], 'xian4': ['线', '现', '县'], 'hen3': ['很'], 'shu4': ['数', '树'],
+  'chuan1': ['穿', '川'], 'gei3': ['给'], 'zhu1': ['珠', '猪', '株'], 'xiang4': ['项', '向', '象'],
+  'lian4': ['链', '恋', '练'], 'qing1': ['轻', '清', '青'], 'zhong4': ['重', '众'],
+  'qia4': ['恰'], 'si4': ['似', '四', '思'], 'xin1': ['心', '新', '辛'], 'zhong1': ['中', '终', '钟'],
+  'si1': ['思', '丝', '私'], 'nian4': ['念'], 'bei4': ['被', '备', '倍'], 'dai4': ['戴', '带', '代'],
+  'shou3': ['手', '首'], 'wan4': ['腕', '万'], 'zhi1': ['之', '知', '只'], 'jian1': ['间', '坚', '尖'],
+  'yi1': ['一', '衣', '依'], 'peng4': ['碰'],
+// ======= 常用高频字扩充包  =======
+'ai4': ['爱', '碍', '艾', '唉'],
+'ba1': ['八', '吧', '巴', '扒'],
+'ba4': ['爸', '罢', '霸'],
+'bai2': ['白'],
+'bai3': ['百', '摆'],
+'ban4': ['半', '办', '伴', '扮'],
+'bao3': ['宝', '保', '饱'],
+'bei3': ['北'],
+'ben3': ['本'],
+'bi3': ['比', '笔', '彼'],
+'bie2': ['别'],
+'bing4': ['病', '并'],
+'bo1': ['波', '播', '拨'],
+'bu4': ['不', '部', '步', '布'],
+'cai2': ['才', '材', '财'],
+'cai3': ['采', '彩', '踩'],
+'cao3':['草'],
+'can1': ['参', '餐'],
+'chang2': ['长', '常', '场', '肠'],
+'che1': ['车'],
+'cheng2': ['成', '城', '程', '诚'],
+'chi1': ['吃'],
+'chu1': ['出', '初'],
+'chu3': ['处', '楚'],
+'chuan2': ['船', '传'],
+'ci3': ['此'],
+'cong2': ['从', '丛'],
+'cuo4': ['错', '措'],
+'da2': ['答', '达'],
+'da3': ['打'],
+'dai4': ['带', '代', '待', '戴'],
+'dan1': ['单', '担'],
+'dan4': ['但', '蛋', '淡'],
+'dao4': ['到', '道', '倒', '岛'],
+'de5': ['的', '得', '地'],
+'deng3': ['等'],
+'di1': ['低', '滴'],
+'di2': ['敌', '笛'],
+'di3': ['底', '抵'],
+'dian3': ['点', '典'],
+'dian4': ['电', '店', '殿'],
+'dong1': ['东', '冬'],
+'dong4': ['动', '洞', '冻'],
+'du1': ['读', '都', '督'],
+'du4': ['度', '渡', '肚'],
+'duan3': ['短'],
+'duan4': ['段', '断', '锻'],
+'dui4': ['对', '队'],
+'duo1': ['多'],
+'er2': ['儿', '而'],
+'er4': ['二'],
+'fa1': ['发'],
+'fan3': ['反', '返'],
+'fan4': ['饭', '犯', '范'],
+'fang1': ['方', '芳'],
+'fang2': ['房', '防', '妨'],
+'fang4': ['放'],
+'fei1': ['飞', '非'],
+'fen1': ['分', '芬'],
+'feng1': ['风', '封', '丰'],
+'fu2': ['服', '福', '扶'],
+'fu4': ['父', '付', '附', '负'],
+'gao1': ['高', '糕'],
+'gao4': ['告'],
+'ge1': ['歌', '哥', '割'],
+'gei3': ['给'],
+'gen1': ['跟', '根'],
+'geng4': ['更'],
+'gong1': ['工', '公', '功', '攻'],
+'gong4': ['共', '供'],
+'gou4': ['够', '构', '购'],
+'gu3': ['古', '股', '鼓'],
+'gu4': ['故', '顾', '固'],
+'guan1': ['关', '观', '官'],
+'guan3': ['管', '馆'],
+'guang1': ['光'],
+'gui1': ['归', '规'],
+'guo2': ['国'],
+'guo4': ['过', '果', '锅'],
+'hai2': ['还', '孩'],
+'hai3': ['海'],
+'han2': ['寒', '含', '韩'],
+'hao3': ['好'],
+'hao4': ['号', '浩'],
+'he2': ['和', '合', '河', '何'],
+'he1': ['喝', '呵'],
+'hei1': ['黑'],
+'hen3': ['很', '狠'],
+'hong2': ['红', '洪'],
+'hou4': ['后', '候', '厚'],
+'hu2': ['湖', '胡', '壶'],
+'hu4': ['户', '护', '互'],
+'hua1': ['花'],
+'hua4': ['话', '画', '化'],
+'huan1': ['欢'],
+'huan5': ['欢'], // 轻声，如“喜欢”
+'huan2': ['还', '环'],
+'huang2': ['黄', '皇'],
+'hui2': ['回'],
+'hui4': ['会', '汇', '惠'],
+'huo3': ['火', '伙'],
+'huo4': ['或', '货', '获'],
+'ji1': ['机', '基', '积', '击'],
+'ji2': ['及', '级', '极', '急'],
+'ji3': ['几', '己', '挤'],
+'ji4': ['记', '计', '技', '季'],
+'jia1': ['家', '加', '佳'],
+'jia3': ['假', '甲'],
+'jia4': ['价', '架', '驾'],
+'jian1': ['间', '坚', '尖', '肩'],
+'jian3': ['减', '简', '检'],
+'jian4': ['见', '件', '建', '健'],
+'jiang1': ['江', '将', '姜'],
+'jiang3': ['讲', '奖'],
+'jiao1': ['交', '教', '焦'],
+'jiao3': ['脚', '角', '饺'],
+'jiao4': ['叫', '较', '教'],
+'jie1': ['接', '街', '阶'],
+'jie2': ['节', '结', '杰'],
+'jie3': ['姐', '解'],
+'jie4': ['界', '介', '借', '戒'],
+'jin1': ['今', '金', '斤', '津'],
+'jin4': ['进', '近', '尽', '禁'],
+'jing1': ['经', '京', '惊', '精'],
+'jing3': ['井', '景', '警'],
+'jing4': ['静', '净', '竟', '境'],
+'jiu3': ['九', '久', '酒'],
+'jiu4': ['就', '旧', '救'],
+'ju2': ['局', '菊'],
+'ju3': ['举'],
+'ju4': ['句', '巨', '具', '剧'],
+'jue2': ['觉', '决', '绝'],
+'kai1': ['开'],
+'kan4': ['看'],
+'ke3': ['可'],
+'ke4': ['客', '课', '刻'],
+'kong1': ['空'],
+'kou3': ['口'],
+'ku3': ['苦'],
+'kuai4': ['快', '块'],
+'kuan1': ['宽'],
+'la1': ['拉'],
+'lai2': ['来'],
+'lan2': ['蓝', '兰', '栏'],
+'lao3': ['老'],
+'le5': ['了'],
+'lei4': ['累', '泪', '类'],
+'leng3': ['冷'],
+'li2': ['离', '梨', '黎'],
+'li3': ['里', '理', '李', '礼'],
+'li4': ['力', '立', '利', '历'],
+'lian2': ['连', '联', '怜'],
+'liang3': ['两'],
+'liang4': ['亮', '量', '辆'],
+'liao3': ['了'],
+'lin2': ['林', '临', '邻'],
+'ling2': ['零', '灵', '铃'],
+'liu2': ['流', '留', '刘'],
+'long2': ['龙', '隆'],
+'lu4': ['路', '露', '陆'],
+'lv3': ['旅', '铝'],
+'lv4': ['绿', '律', '虑'],
+'luo4': ['落', '洛', '络'],
+'ma1': ['妈', '抹'],
+'ma3': ['马', '码'],
+'ma5': ['吗', '嘛'],
+'mai3': ['买'],
+'mai4': ['卖', '麦'],
+'man3': ['满'],
+'man4': ['慢', '漫'],
+'mang2': ['忙', '盲'],
+'mao2': ['毛', '矛'],
+'mei2': ['没', '眉', '媒'],
+'mei3': ['美', '每','莓'],
+'men2': ['门'],
+'men5': ['们'],
+'meng4': ['梦', '孟'],
+'mi3': ['米'],
+'mian4': ['面'],
+'min2': ['民'],
+'ming2': ['明', '名', '鸣'],
+'ming4': ['命'],
+'mo4': ['末', '莫', '墨'],
+'mu3': ['母'],
+'mu4': ['木', '目', '幕', '牧'],
+'na2': ['拿'],
+'na3': ['哪'],
+'na4': ['那', '纳'],
+'nan2': ['南', '男', '难'],
+'nan4': ['难'],
+'ne5': ['呢'],
+'nei4': ['内'],
+'neng2': ['能'],
+'ni3': ['你'],
+'nian2': ['年', '粘'],
+'nian4': ['念'],
+'niao3': ['鸟'],
+'nin2': ['您'],
+'niu2': ['牛'],
+'nong2': ['农', '浓'],
+'nv3': ['女'],
+'pai2': ['排', '牌'],
+'pang2': ['旁', '庞'],
+'pao3': ['跑'],
+'peng2': ['朋', '棚'],
+'pi2': ['皮', '疲'],
+'pian4': ['片', '骗'],
+'piao4': ['票', '漂'],
+'pin3': ['品'],
+'ping2': ['平', '苹', '评'],
+'po4': ['破', '迫'],
+'pu3': ['普', '谱'],
+'qi1': ['七', '期', '妻', '欺'],
+'qi2': ['其', '奇', '齐', '骑'],
+'qi3': ['起', '企', '启'],
+'qi4': ['气', '汽', '器', '弃'],
+'qian1': ['千', '牵', '迁', '签'],
+'qian2': ['前', '钱', '潜'],
+'qian3': ['浅', '遣'],
+'qiang2': ['强', '墙'],
+'qiao1': ['敲', '悄'],
+'qie4': ['切', '且'],
+'qin1': ['亲', '侵'],
+'qing1': ['轻', '清', '青'],
+'qing2': ['情', '晴'],
+'qing3': ['请', '顷'],
+'qiu2': ['求', '球', '秋'],
+'qu1': ['区', '曲', '驱'],
+'qu3': ['取', '曲'],
+'qu4': ['去', '趣'],
+'quan2': ['全', '权', '泉'],
+'que4': ['却', '确', '缺'],
+'ran2': ['然', '燃'],
+'rang4': ['让'],
+'re4': ['热'],
+'ren2': ['人'],
+'ren4': ['认', '任', '刃'],
+'ri4': ['日'],
+'rong2': ['容', '荣', '融'],
+'rou4': ['肉'],
+'ru2': ['如'],
+'ru4': ['入'],
+'san1': ['三'],
+'se4': ['色', '涩'],
+'sha1': ['沙', '杀'],
+'shan1': ['山', '删', '衫'],
+'shang1': ['商', '伤'],
+'shang4': ['上', '尚'],
+'shao3': ['少'],
+'she4': ['设', '社', '射'],
+'shen1': ['身', '深', '伸'],
+'shen2': ['神', '什'],
+'shen4': ['甚', '渗'],
+'sheng1': ['声', '生', '升'],
+'sheng4': ['胜', '圣', '剩'],
+'shi1': ['师', '失', '诗', '施'],
+'shi2': ['时', '十', '实', '识'],
+'shi3': ['使', '史', '始'],
+'shi4': ['是', '事', '市', '世', '式'],
+'shou1': ['收'],
+'shou3': ['手', '首', '守'],
+'shou4': ['受', '授', '售'],
+'shu1': ['书', '输', '舒'],
+'shu3': ['数', '属', '鼠'],
+'shu4': ['树', '数', '术', '束'],
+'shui3': ['水'],
+'shui4': ['睡', '税'],
+'shuo1': ['说'],
+'si1': ['思', '丝', '私'],
+'si3': ['死'],
+'si4': ['四', '似', '寺'],
+'song4': ['送', '宋', '松'],
+'su4': ['速', '素', '诉'],
+'suan4': ['算', '酸'],
+'sui1': ['虽'],
+'sui2': ['随'],
+'sui4': ['岁', '碎'],
+'sun1': ['孙'],
+'suo3': ['所', '锁', '索'],
+'ta1': ['他', '她', '它'],
+'tai4': ['太', '态', '泰'],
+'tan2': ['谈', '弹', '坛'],
+'tang2': ['糖', '堂', '唐'],
+'tao2': ['逃', '桃', '陶'],
+'te4': ['特'],
+'ti2': ['提', '题', '蹄'],
+'ti3': ['体'],
+'tian1': ['天', '添'],
+'tian2': ['田', '甜', '填'],
+'tiao2': ['条', '调'],
+'ting1': ['听', '厅'],
+'ting2': ['停', '庭', '挺'],
+'tong1': ['通'],
+'tong2': ['同', '童', '铜'],
+'tou2': ['头', '投'],
+'tu2': ['图', '途', '徒'],
+'tu3': ['土', '吐'],
+'tuan2': ['团'],
+'tui1': ['推'],
+'tui4': ['退', '腿'],
+'wai4': ['外'],
+'wan2': ['完', '玩', '丸'],
+'wan3': ['晚', '碗', '挽'],
+'wan4': ['万'],
+'wang2': ['王', '亡'],
+'wang3': ['往', '网', '枉'],
+'wang4': ['忘', '望', '旺'],
+'wei2': ['为', '围', '维', '违'],
+'wei3': ['委', '伟', '尾'],
+'wei4': ['为', '位', '未', '味'],
+'wen2': ['文', '闻', '蚊'],
+'wen3': ['稳', '吻'],
+'wen4': ['问'],
+'wo3': ['我'],
+'wu2': ['无', '吴', '屋'],
+'wu3': ['五', '午', '武', '舞'],
+'wu4': ['物', '务', '误', '雾'],
+'xi1': ['西', '吸', '希', '息'],
+'xi3': ['喜', '洗', '习'],
+'xi4': ['系', '细', '戏', '席'],
+'xia4': ['下', '夏', '吓'],
+'xian1': ['先', '鲜', '仙'],
+'xian2': ['闲', '贤', '弦'],
+'xian4': ['现', '线', '县', '限'],
+'xiang1': ['相', '香', '乡', '箱'],
+'xiang2': ['想', '祥', '详'],
+'xiang4': ['向', '项', '象', '像'],
+'xiao3': ['小', '晓'],
+'xiao4': ['笑', '校', '效'],
+'xie1': ['些', '歇', '协'],
+'xie3': ['写', '血'],
+'xie4': ['谢', '解', '械'],
+'xin1': ['心', '新', '辛', '欣'],
+'xin4': ['信'],
+'xing1': ['星', '兴', '猩'],
+'xing2': ['行', '形', '型'],
+'xing4': ['姓', '性', '幸'],
+'xiong1': ['兄', '胸', '凶'],
+'xiu1': ['休', '修', '羞'],
+'xu1': ['需', '须', '虚'],
+'xu3': ['许'],
+'xu4': ['续', '序', '叙'],
+'xuan3': ['选'],
+'xue2': ['学', '穴'],
+'xue3': ['雪'],
+'xun2': ['寻', '询', '巡'],
+'ya1': ['压', '呀', '押'],
+'ya3': ['雅'],
+'yan1': ['烟', '言', '研', '烟'],
+'yan2': ['严', '研', '盐', '颜'],
+'yan3': ['眼', '演', '掩'],
+'yan4': ['验', '燕', '宴'],
+'yang2': ['阳', '羊', '洋', '扬'],
+'yang3': ['养', '氧', '痒'],
+'yang4': ['样'],
+'yao4': ['要', '药', '耀'],
+'ye3': ['也', '野'],
+'ye4': ['夜', '业', '叶', '页'],
+'yi1': ['一', '衣', '医', '依'],
+'yi2': ['移', '疑', '仪', '姨'],
+'yi3': ['已', '以', '椅', '乙'],
+'yi4': ['意', '义', '议', '艺', '忆'],
+'yin1': ['因', '音', '阴', '姻'],
+'yin2': ['银', '吟', '引'],
+'yin3': ['引', '饮', '隐'],
+'yin4': ['印'],
+'ying1': ['应', '英', '鹰', '婴'],
+'ying2': ['迎', '赢', '营', '蝇'],
+'ying3': ['影'],
+'ying4': ['硬', '映', '应'],
+'yong3': ['永', '勇', '泳', '涌'],
+'yong4': ['用'],
+'you1': ['优', '忧', '幽'],
+'you2': ['由', '游', '油', '犹'],
+'you3': ['有', '友', '右'],
+'you4': ['又', '右', '幼', '诱'],
+'yu2': ['鱼', '于', '余', '愉', '渔'],
+'yu3': ['雨', '语', '与', '羽'],
+'yu4': ['遇', '育', '玉', '预', '域'],
+'yuan2': ['元', '员', '原', '园', '圆'],
+'yuan3': ['远'],
+'yuan4': ['院', '愿', '怨'],
+'yue1': ['约'],
+'yue4': ['月', '越', '阅', '跃'],
+'yun2': ['云', '匀'],
+'yun4': ['运', '孕', '晕'],
+'za2': ['杂'],
+'zai4': ['再', '在'],
+'zan2': ['咱'],
+'zan4': ['暂', '赞'],
+'zao3': ['早', '枣', '澡'],
+'zao4': ['造', '燥', '躁'],
+'ze2': ['则', '责', '择'],
+'zhan3': ['展', '斩'],
+'zhan4': ['战', '站', '占'],
+'zhang1': ['张', '章'],
+'zhang3': ['长', '掌', '涨'],
+'zhang4': ['丈', '仗', '账'],
+'zhao3': ['找', '沼'],
+'zhao4': ['照', '赵', '罩'],
+'zhe4': ['这', '着'],
+'zhen1': ['真', '珍', '针', '侦'],
+'zheng1': ['争', '征', '睁'],
+'zheng3': ['整'],
+'zheng4': ['正', '政', '证', '郑'],
+'zhi1': ['之', '知', '只', '支', '枝'],
+'zhi2': ['直', '值', '职', '植'],
+'zhi3': ['只', '指', '纸', '止'],
+'zhi4': ['治', '制', '致', '至', '志'],
+'zhong1': ['中', '终', '钟'],
+'zhong4': ['重', '众', '种'],
+'zhou1': ['周', '州', '洲'],
+'zhu3': ['主', '煮', '嘱'],
+'zhu4': ['住', '助', '注', '祝', '著'],
+'zhuan3': ['转'],
+'zhuan4': ['赚', '传', '砖'],
+'zhuang1': ['装', '庄', '妆'],
+'zhuang4': ['状', '撞', '壮'],
+'zhun3': ['准'],
+'zhuo1': ['桌', '捉'],
+'zi1': ['资', '姿', '滋'],
+'zi3': ['子', '紫', '仔'],
+'zi4': ['字', '自'],
+'zong1': ['宗', '综'],
+'zong3': ['总'],
+'zou3': ['走'],
+'zu2': ['足', '族', '祖'],
+'zui4': ['最', '罪', '醉'],
+'zuo2': ['昨'],
+'zuo3': ['左'],
+'zuo4': ['做', '作', '坐', '座']
+// ======= 扩充包结束 =======
+};
+
+let memoryBank = {};
+try { memoryBank = JSON.parse(localStorage.getItem('cryptoMemory') || '{}'); } catch(e) {}
+
+let historyStack = [];
+
+// ==========================================
+// 3. 双拼转换逻辑 (修复单音字)
+// ==========================================
+function convertToShuangpin(pinyin) {
+  if (!pinyin) return null;
+  let initial = '', rest = pinyin;
+  if (pinyin.startsWith('zh')) { initial = 'zh'; rest = pinyin.slice(2); }
+  else if (pinyin.startsWith('ch')) { initial = 'ch'; rest = pinyin.slice(2); }
+  else if (pinyin.startsWith('sh')) { initial = 'sh'; rest = pinyin.slice(2); }
+  else if ('bpmfdtnlgkhjqxrzcsyw'.includes(pinyin[0])) { initial = pinyin[0]; rest = pinyin.slice(1); }
+
+  const mappedInitial = zrmInitialMap[initial] || '';
+  let mappedVowel = rest;
+  if (zrmVowelMap[rest]) mappedVowel = zrmVowelMap[rest];
+  else {
+    for (let len = rest.length; len > 0; len--) {
+      const sub = rest.slice(0, len);
+      if (zrmVowelMap[sub]) { mappedVowel = zrmVowelMap[sub] + rest.slice(len); break; }
+    }
+  }
+  // 【修复】不再重复单音字母，直接返回1个字母。
+  return mappedInitial + mappedVowel;
+}
+
+function convertFromShuangpin(sp) {
+  if (!sp || sp.length < 1) return null;
+  const first = sp[0];
+  
+  // 【修复】取消重复字母 aa, oo, ee 的特殊判断
+
+  if (sp.length === 1) {
+      // 如果是单字母（如 a, o, e），直接返回该字母作为拼音
+      if (reverseVowelMap[first]) return reverseVowelMap[first][0];
+      return first;
+  }
+
+  const second = sp[1];
+  if (!reverseInitialMap[first] && reverseVowelMap[first]) return reverseVowelMap[first][0];
+  const initial = reverseInitialMap[first] || first;
+  let vowel = (reverseVowelMap[second] || [second])[0];
+  if (['y','j','q','x'].includes(initial) && second === 't') vowel = 'ue';
+  if (second === 'o' && 'dtnlgkhzcsr'.includes(initial)) vowel = 'uo';
+  if (initial === 'y' && second === 'v') vowel = 'u';
+  if (['j','q','x'].includes(initial) && second === 'v') vowel = 'u';
+  return initial + vowel;
+}
+
+function getPinyinForChar(char) {
+  for (const [pinyinWithTone, chars] of Object.entries(pinyinDict)) {
+    if (chars.includes(char)) {
+      const tone = parseInt(pinyinWithTone.match(/(\d)$/)[1]) || 5;
+      return { pinyin: pinyinWithTone.replace(/\d$/, ''), tone: tone };
+    }
+  }
+  return null;
+}
+
+// ==========================================
+// 4. 加密与解密
+// ==========================================
+function encryptText() {
+  let text = document.getElementById('inputText').value;
+  if (!text) { setStatus('请输入原文', 'error'); return; }
+  let encryptedResult = '';
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (punctPlaceholder[char]) { encryptedResult += punctPlaceholder[char]; continue; }
+    if (/[\u4e00-\u9fa5]/.test(char)) {
+      const pinyinData = getPinyinForChar(char);
+      if (pinyinData) {
+        const sp = convertToShuangpin(pinyinData.pinyin);
+        if (sp) {
+          for (let j = 0; j < sp.length; j++) encryptedResult += (keyboardMap[sp[j]] || sp[j]);
+          encryptedResult += (toneMap[pinyinData.tone] || '');
+        } else encryptedResult += char;
+      } else encryptedResult += char;
+    } else encryptedResult += char;
+  }
+  document.getElementById('outputText').innerText = encryptedResult;
+  setStatus('加密完成', 'ok');
+}
+
+let currentPinyinList = [];
+
+function decryptText() {
+  let text = document.getElementById('inputText').value.trim();
+  if (!text) { setStatus('请输入密文', 'error'); return; }
+
+  let rawText = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (reverseKeyboardMap[ch]) rawText += reverseKeyboardMap[ch];
+    else if (reversePunctPlaceholder[ch]) rawText += reversePunctPlaceholder[ch];
+    else rawText += ch;
+  }
+
+  // 【修复】正则改为 {1,2}，智能匹配 1个或2个字母
+  const regex = /([a-z]{1,2})(→|↑|←|↓|\\)/g;
+  let match, lastIndex = 0;
+  currentPinyinList = [];
+
+  while ((match = regex.exec(rawText)) !== null) {
+    if (match.index > lastIndex) currentPinyinList.push({ type: 'raw', text: rawText.substring(lastIndex, match.index) });
+    const pinyin = convertFromShuangpin(match[1]);
+    const toneNumber = reverseToneMap[match[2]] || 5;
+    const pinyinWithTone = pinyin ? pinyin + toneNumber : match[1] + match[2];
+    currentPinyinList.push({ 
+      type: 'char', shuangpin: match[1], tone: match[2], key: pinyinWithTone, text: '' 
+    });
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < rawText.length) currentPinyinList.push({ type: 'raw', text: rawText.substring(lastIndex) });
+
+  let finalChars = [];
+  let i = 0;
+  while (i < currentPinyinList.length) {
+    const item = currentPinyinList[i];
+    if (item.type === 'raw') { 
+        finalChars.push({ type: 'raw', text: item.text }); 
+        i++; 
+        continue; 
+    }
+
+    let decodedChar = '';
+    let isMemory = false;
+    let currentPinyin = item.key;
+
+    let matchedWord = false;
+    for (let len = 4; len >= 2; len--) {
+        if (i + len - 1 < currentPinyinList.length) {
+            let allChars = true;
+            for(let k=1; k<len; k++) {
+                if(currentPinyinList[i+k].type !== 'char') { allChars = false; break; }
+            }
+            if (allChars) {
+                let wordPinyin = '';
+                for(let k=0; k<len; k++) {
+                    wordPinyin += (k>0?'_':'') + currentPinyinList[i+k].key;
+                }
+                const wordKey = `W:${wordPinyin}`;
+                if (memoryBank[wordKey]) {
+                    decodedChar = memoryBank[wordKey];
+                    item.text = decodedChar;
+                    finalChars.push({ type: 'char', text: decodedChar, key: wordKey, isMemory: true, index: i, length: len });
+                    i += len;
+                    matchedWord = true;
+                    break;
+                }
+            }
+        }
+    }
+    if (matchedWord) continue;
+
+    let prevPinyin = (i > 0 && currentPinyinList[i-1].type === 'char') ? currentPinyinList[i-1].key : '';
+    let nextPinyin = (i < currentPinyinList.length - 1 && currentPinyinList[i+1].type === 'char') ? currentPinyinList[i+1].key : '';
+
+    const keyFull = `F:${prevPinyin}|${currentPinyin}|${nextPinyin}`;
+    const keyPrev = `P:${prevPinyin}|${currentPinyin}`;
+    const keyNext = `N:${currentPinyin}|${nextPinyin}`;
+    const keySingle = `S:${currentPinyin}`;
+
+    if (memoryBank[keyFull]) { decodedChar = memoryBank[keyFull]; isMemory = true; }
+    else if (memoryBank[keyPrev]) { decodedChar = memoryBank[keyPrev]; isMemory = true; }
+    else if (memoryBank[keyNext]) { decodedChar = memoryBank[keyNext]; isMemory = true; }
+    else if (memoryBank[keySingle]) { decodedChar = memoryBank[keySingle]; isMemory = true; }
+    else {
+      const candidates = pinyinDict[currentPinyin];
+      if (candidates && candidates.length > 0) decodedChar = candidates[0];
+      else decodedChar = `[${currentPinyin}]`;
+    }
+
+    item.text = decodedChar;
+    finalChars.push({ type: 'char', text: decodedChar, key: currentPinyin, isMemory: isMemory, index: i, length: 1 });
+    i++;
+  }
+
+  renderClickableOutput(finalChars);
+  setStatus('解密完成。点击红色字可修正。', 'ok');
+}
+
+function renderClickableOutput(finalChars) {
+  const outputBox = document.getElementById('outputText');
+  outputBox.innerHTML = '';
+  for (const item of finalChars) {
+    if (item.type === 'raw') {
+      let text = item.text;
+      for (let i = 0; i < text.length; i++) {
+          const ch = text[i];
+          if (reversePunctPlaceholder[ch]) outputBox.appendChild(document.createTextNode(reversePunctPlaceholder[ch]));
+          else outputBox.appendChild(document.createTextNode(ch));
+      }
+    } else {
+      const span = document.createElement('span');
+      span.className = 'clickable-char';
+      if (item.isMemory) span.classList.add('corrected-char');
+      span.innerText = item.text;
+      span.dataset.key = item.key;
+      span.dataset.index = item.index;
+      span.dataset.length = item.length; 
+      span.onclick = () => correctChar(span);
+      outputBox.appendChild(span);
+    }
+  }
+}
+
+// ---------- 记忆修改与撤回核心逻辑 ----------
+function correctChar(span) {
+  const currentChar = span.innerText;
+  const idx = parseInt(span.dataset.index);
+
+  let promptText = `当前是「${currentChar}」。\n请输入正确的字或词组（如“真美”、“珍珠”、“那真珠”）：`;
+  if (currentChar.startsWith('[')) promptText = `字典没收录这个音。\n请输入对应的字或词组：`;
+  
+  const userInput = prompt(promptText, currentChar.startsWith('[') ? '' : currentChar);
+  if (!userInput || userInput === currentChar) return;
+  const inputChars = Array.from(userInput.trim());
+
+  if (inputChars.length === 0) return;
+
+  let availableChars = 0;
+  for (let k = 0; k < inputChars.length; k++) {
+      if (idx + k < currentPinyinList.length && currentPinyinList[idx + k].type === 'char') {
+          availableChars++;
+      } else {
+          break; 
+      }
+  }
+
+  if (availableChars < inputChars.length) {
+      setStatus(`当前上下文不足以合并这么长的词组（需要 ${inputChars.length} 个字，但后面只有 ${availableChars} 个）`, 'error');
+      return;
+  }
+
+  historyStack.push(JSON.parse(JSON.stringify(memoryBank)));
+  if (historyStack.length > 30) historyStack.shift(); 
+
+  let wordPinyin = '';
+  for (let k = 0; k < inputChars.length; k++) {
+      wordPinyin += (k > 0 ? '_' : '') + currentPinyinList[idx + k].key;
+  }
+
+  const wordKey = `W:${wordPinyin}`;
+  memoryBank[wordKey] = userInput;
+  
+  if (inputChars.length === 1) {
+      const pinyinKey = currentPinyinList[idx].key;
+      let prevPinyin = (idx > 0 && currentPinyinList[idx-1].type === 'char') ? currentPinyinList[idx-1].key : '';
+      let nextPinyin = (idx + 1 < currentPinyinList.length && currentPinyinList[idx+1].type === 'char') ? currentPinyinList[idx+1].key : '';
+      memoryBank[`F:${prevPinyin}|${pinyinKey}|${nextPinyin}`] = userInput;
+      memoryBank[`P:${prevPinyin}|${pinyinKey}`] = userInput;
+      memoryBank[`N:${pinyinKey}|${nextPinyin}`] = userInput;
+      memoryBank[`S:${pinyinKey}`] = userInput;
+  }
+
+  setStatus(`已记住搭配：${userInput}`, 'ok');
+
+  const parent = span.parentElement;
+  const allSpans = Array.from(parent.querySelectorAll('.clickable-char'));
+  const currentSpanIdx = allSpans.indexOf(span);
+
+  span.innerText = inputChars[0];
+  span.classList.add('corrected-char');
+  span.dataset.length = inputChars.length;
+
+  for (let k = 1; k < inputChars.length; k++) {
+      if (currentSpanIdx + k < allSpans.length) {
+          const nextSpan = allSpans[currentSpanIdx + k];
+          nextSpan.innerText = inputChars[k];
+          nextSpan.classList.add('corrected-char');
+          nextSpan.dataset.length = 0; 
+      }
+  }
+
+  try { localStorage.setItem('cryptoMemory', JSON.stringify(memoryBank)); } catch(e) {}
+}
+
+// ---------- 撤回功能 ----------
+function undoLast() {
+  if (historyStack.length === 0) {
+    setStatus('没有可以撤回的操作了', 'error');
+    return;
+  }
+  memoryBank = historyStack.pop(); 
+  try { localStorage.setItem('cryptoMemory', JSON.stringify(memoryBank)); } catch(e) {}
+  
+  decryptText();
+  setStatus('已撤回上一步修改', 'ok');
+}
+
+// ==========================================
+// 5. 记忆库管理
+// ==========================================
+function exportMemory() {
+  const data = JSON.stringify(memoryBank);
+  if (data === '{}') { alert('记忆库为空'); return; }
+  const textarea = document.createElement('textarea');
+  textarea.value = data;
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+  prompt('记忆库已复制！请粘贴到备忘录保存。下次使用前，点“导入记忆库”粘贴此内容：', data);
+}
+
+function importMemory() {
+  const data = prompt('请粘贴之前导出的记忆库内容：');
+  if (!data) return;
+  try {
+    memoryBank = { ...memoryBank, ...JSON.parse(data) };
+    localStorage.setItem('cryptoMemory', JSON.stringify(memoryBank));
+    setStatus('记忆库导入成功！', 'ok');
+  } catch(e) { setStatus('导入失败，数据格式不正确', 'error'); }
+}
+
+function clearMemory() {
+  if (confirm('确定要清空所有记忆库吗？这将删除你所有的纠正记录！')) {
+    memoryBank = {};
+    historyStack = [];
+    localStorage.removeItem('cryptoMemory');
+    setStatus('记忆库已清空', 'ok');
+  }
+}
+
+// ==========================================
+// 6. 辅助 UI
+// ==========================================
+function setStatus(msg, type = '') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+function copyResult() {
+  const outputBox = document.getElementById('outputText');
+  const text = outputBox.innerText || outputBox.textContent;
+  if (!text.trim()) { setStatus('没有可复制的内容', 'error'); return; }
+  navigator.clipboard.writeText(text).then(() => setStatus('已复制到剪贴板', 'ok')).catch(() => {
+    const range = document.createRange(); range.selectNode(outputBox);
+    window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+    document.execCommand('copy'); setStatus('已复制到剪贴板', 'ok');
+  });
+}
+
+function clearAll() {
+  document.getElementById('inputText').value = '';
+  document.getElementById('outputText').innerHTML = '';
+  historyStack = [];
+  setStatus('');
+}
+</script>
+</body>
+</html>
