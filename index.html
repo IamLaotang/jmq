@@ -1,12 +1,12 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>语言加密器（完美单音+词组撤回版）</title>
+<title>语言加密器（魔法阵版）</title>
 <style>
   :root {
-    --bg: #1e1b4b; --card: #1e293b; --text: #e2e8f0; --sub: #94a3b8;
+    --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --sub: #94a3b8;
     --primary: #0ea5e9; --success: #22c55e; --danger: #f87171;
     --border: #334155; --input-bg: #0b1220;
   }
@@ -53,15 +53,12 @@
   .clickable-char { cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: background 0.2s; color: #fca5a5; }
   .clickable-char:hover { background: #334155; color: #f8fafc; }
   .corrected-char { color: #4ade80; } 
-  #errorLog { color: #fca5a5; font-size: 12px; margin-top: 10px; display: none; }
 </style>
 </head>
 <body>
-<div id="errorLog"></div>
-
 <div class="app">
   <h1>🔐 语言加密器</h1>
-  <div class="sub">自然码双拼 → 声调箭头 → 键盘符号 → 全能词组记忆</div>
+  <div class="sub">自然码双拼 → 声调箭头 → 键盘符号 → 魔法阵</div>
   
   <div class="card">
     <label for="inputText">输入原文（中文）或密文</label>
@@ -70,6 +67,9 @@
     <div class="row">
       <button class="primary" onclick="encryptText()">加密</button>
       <button class="success" onclick="decryptText()">解密</button>
+      <button class="undo" onclick="generateMagicArray()">🔮 生成魔法阵</button>
+      <button class="undo" onclick="document.getElementById('imageUpload').click()">📥 导入魔法阵解密</button>
+      <input type="file" id="imageUpload" accept="image/png, image/jpeg" style="display: none;" onchange="importMagicArray(event)">
       <button onclick="copyResult()">复制结果</button>
       <button class="undo" onclick="undoLast()">↩️ 撤回上一步</button>
       <button class="danger" onclick="clearAll()">清空</button>
@@ -84,36 +84,15 @@
       <button class="info" onclick="importMemory()">📥 导入记忆库</button>
       <button class="danger" onclick="clearMemory()">🗑️ 清空记忆库</button>
     </div>
-    <div style="font-size: 12px; color: #94a3b8; margin-top: 8px;">
-      💡 提示：点击红字后，可以输入任意长度的词组。如果改错了，点击“撤回上一步”即可恢复。
-    </div>
   </div>
 </div>
 
 <script>
-// ================= 崩溃诊断 =================
-window.onerror = function(msg, url, lineNo) {
-    const log = document.getElementById('errorLog');
-    if (log) {
-        log.style.display = 'block';
-        log.innerHTML = '⚠️ 网页代码出错啦！<br>错误信息：' + msg + '<br>行号：' + lineNo + '<br>请截图给开发者。';
-    }
-    return false; 
-};
-
-// ==========================================
-// 1. 核心映射表
-// ==========================================
+// ================= 1. 核心映射表 =================
 const zrmInitialMap = { 'b':'b', 'p':'p', 'm':'m', 'f':'f', 'd':'d', 't':'t', 'n':'n', 'l':'l', 'g':'g', 'k':'k', 'h':'h', 'j':'j', 'q':'q', 'x':'x', 'r':'r', 'z':'z', 'c':'c', 's':'s', 'y':'y', 'w':'w', 'zh':'v', 'ch':'i', 'sh':'u' };
 const reverseInitialMap = {}; for (const [k, v] of Object.entries(zrmInitialMap)) reverseInitialMap[v] = k;
 
-const zrmVowelMap = {
-  'a':'a', 'o':'o', 'e':'e', 'i':'i', 'u':'u', 'v':'v',
-  'ai':'l', 'ei':'z', 'ui':'v', 'ao':'k', 'ou':'b', 'iu':'q',
-  'ie':'x', 've':'t', 'an':'j', 'en':'f', 'in':'n', 'un':'p', 'vn':'p',
-  'ang':'h', 'eng':'g', 'ing':'y', 'ong':'s', 'ia':'w', 'iao':'c', 'ian':'m', 'iang':'d', 'iong':'s',
-  'ua':'w', 'uo':'o', 'uai':'y', 'uan':'r', 'uang':'d', 'ue':'t', 'uan':'r', 'van':'r'
-};
+const zrmVowelMap = { 'a':'a', 'o':'o', 'e':'e', 'i':'i', 'u':'u', 'v':'v', 'ai':'l', 'ei':'z', 'ui':'v', 'ao':'k', 'ou':'b', 'iu':'q', 'ie':'x', 've':'t', 'an':'j', 'en':'f', 'in':'n', 'un':'p', 'vn':'p', 'ang':'h', 'eng':'g', 'ing':'y', 'ong':'s', 'ia':'w', 'iao':'c', 'ian':'m', 'iang':'d', 'iong':'s', 'ua':'w', 'uo':'o', 'uai':'y', 'uan':'r', 'uang':'d', 'ue':'t', 'van':'r' };
 const reverseVowelMap = {}; for (const [k, v] of Object.entries(zrmVowelMap)) { if (!reverseVowelMap[v]) reverseVowelMap[v] = []; reverseVowelMap[v].push(k); }
 
 const keyboardMap = { 'q':'１','w':'２','e':'３','r':'４','t':'５','y':'６','u':'７','i':'８','o':'９','p':'０','a':'～','s':'＠','d':'＃','f':'！','g':'％','h':'＆','j':'＊','k':'（','l':'）','z':'｀','x':'／','c':'－','v':'＿','b':'：','n':'；','m':'？' };
@@ -125,36 +104,31 @@ const reverseToneMap = { '→':1, '↑':2, '←':3, '↓':4, '\\':5 };
 const punctPlaceholder = { '，': '\uE000', '。': '\uE001', '！': '\uE002', '？': '\uE003', '；': '\uE004', '：': '\uE005', '、': '\uE006', '“': '\uE007', '”': '\uE008', '‘': '\uE009', '’': '\uE00A', '（': '\uE00B', '）': '\uE00C', '【': '\uE00D', '】': '\uE00E', '《': '\uE00F', '》': '\uE010', ' ': '\uE011', '\n': '\uE012' };
 const reversePunctPlaceholder = {}; for (const [k, v] of Object.entries(punctPlaceholder)) reversePunctPlaceholder[v] = k;
 
-// ==========================================
-// 2. 拼音字典
-// ==========================================
+// ================= 2. 拼音字典 (精简版，可自行扩充) =================
 const pinyinDict = {
   'de5': ['的', '得', '地'], 'le5': ['了'], 'shi4': ['是', '事', '市'], 'zai4': ['再', '在'],
   'bu4': ['不'], 'ren2': ['人'], 'you3': ['有', '友'], 'wo3': ['我'], 'ta1': ['他', '她', '它'],
   'zhe4': ['这', '着'], 'ge4': ['个', '各'], 'men5': ['们'], 'lai2': ['来'], 'dao4': ['到', '道'],
   'shi2': ['时', '十', '实'], 'da4': ['大', '达'], 'di4': ['地', '第'], 'wei4': ['为', '位', '未'],
   'zi4': ['子', '字', '自'], 'ni3': ['你'], 'hao3': ['好'], 'ma5': ['吗', '嘛'], 'ne5': ['呢'], 'a5': ['啊', '呀'],
-  'jin1': ['今', '金', '斤', '津', '巾'], 'wan3': ['晚', '碗', '挽', '婉'],
-  'yue4': ['月', '越', '阅', '悦', '跃'], 'se4': ['色', '涩', '瑟'],
-  'zhen1': ['真', '珍', '针', '侦', '贞'], 'mei3': ['美', '每', '镁'],
-  'mo4': ['末'], 'luo2': ['锣', '落', '罗'], 'sheng1': ['声', '生', '升'],
-  'xie1': ['歇', '些'], 'suo3': ['唢', '索', '锁'], 'na4': ['呐', '那', '纳'],
-  'xiang3': ['响', '想', '享'], 'bian1': ['鞭', '边', '编'], 'pao4': ['炮', '泡'],
-  'juan3': ['卷'], 'qi3': ['起', '企', '启'], 'yan1': ['烟', '言', '研'],
-  'reng2': ['仍'], 'rao4': ['绕'], 'liang2': ['梁', '粮', '良'], 'jian4': ['见', '间', '件'],
-  'man3': ['满'], 'tian1': ['天'], 'hui1': ['灰', '挥', '辉'], 'jin4': ['尽', '进', '烬'],
-  'piao1': ['飘', '漂'], 'dang4': ['荡', '当'], 'ci2': ['慈', '词'], 'xiang2': ['祥', '详'],
-  'lian3': ['脸', '连', '联'], 'pang2': ['庞', '旁'], 'guo4': ['过'], 'wai4': ['外'],
-  'po2': ['婆'], 'ye3': ['也'], 'bi4': ['必', '比', '笔'], 'tai4': ['太', '态'],
-  'qian1': ['牵', '千', '迁'], 'chang2': ['长', '场', '常', '肠'], 'yi3': ['已', '以'],
-  'ba3': ['把'], 'hui2': ['回'], 'yi4': ['忆', '意', '义'], 'nian3': ['捻', '念'],
-  'zuo4': ['作', '做', '坐'], 'xian4': ['线', '现', '县'], 'hen3': ['很'], 'shu4': ['数', '树'],
-  'chuan1': ['穿', '川'], 'gei3': ['给'], 'zhu1': ['珠', '猪', '株'], 'xiang4': ['项', '向', '象'],
-  'lian4': ['链', '恋', '练'], 'qing1': ['轻', '清', '青'], 'zhong4': ['重', '众'],
-  'qia4': ['恰'], 'si4': ['似', '四', '思'], 'xin1': ['心', '新', '辛'], 'zhong1': ['中', '终', '钟'],
-  'si1': ['思', '丝', '私'], 'nian4': ['念'], 'bei4': ['被', '备', '倍'], 'dai4': ['戴', '带', '代'],
-  'shou3': ['手', '首'], 'wan4': ['腕', '万'], 'zhi1': ['之', '知', '只'], 'jian1': ['间', '坚', '尖'],
-  'yi1': ['一', '衣', '依'], 'peng4': ['碰'],
+  'jin1': ['今', '金', '斤', '津', '巾'], 'wan3': ['晚', '碗', '挽', '婉'], 'yue4': ['月', '越', '阅', '悦', '跃'],
+  'se4': ['色', '涩', '瑟'], 'zhen1': ['真', '珍', '针', '侦', '贞'], 'mei3': ['美', '每', '镁'],
+  'mo4': ['末'], 'luo2': ['锣', '落', '罗'], 'sheng1': ['声', '生', '升'], 'xie1': ['歇', '些'],
+  'suo3': ['唢', '索', '锁'], 'na4': ['呐', '那', '纳'], 'xiang3': ['响', '想', '享'], 'bian1': ['鞭', '边', '编'],
+  'pao4': ['炮', '泡'], 'juan3': ['卷'], 'qi3': ['起', '企', '启'], 'yan1': ['烟', '言', '研'], 'reng2': ['仍'],
+  'rao4': ['绕'], 'liang2': ['梁', '粮', '良'], 'jian4': ['见', '间', '件'], 'man3': ['满'], 'tian1': ['天'],
+  'hui1': ['灰', '挥', '辉'], 'jin4': ['尽', '进', '烬'], 'piao1': ['飘', '漂'], 'dang4': ['荡', '当'],
+  'ci2': ['慈', '词'], 'xiang2': ['祥', '详'], 'lian3': ['脸', '连', '联'], 'pang2': ['庞', '旁'],
+  'guo4': ['过'], 'wai4': ['外'], 'po2': ['婆'], 'ye3': ['也'], 'bi4': ['必', '比', '笔'], 'tai4': ['太', '态'],
+  'qian1': ['牵', '千', '迁'], 'chang2': ['长', '场', '常', '肠'], 'yi3': ['已', '以'], 'ba3': ['把'],
+  'hui2': ['回'], 'yi4': ['忆', '意', '义'], 'nian3': ['捻', '念'], 'zuo4': ['作', '做', '坐'],
+  'xian4': ['线', '现', '县'], 'hen3': ['很'], 'shu4': ['数', '树'], 'chuan1': ['穿', '川'], 'gei3': ['给'],
+  'zhu1': ['珠', '猪', '株'], 'xiang4': ['项', '向', '象'], 'lian4': ['链', '恋', '练'], 'qing1': ['轻', '清', '青'],
+  'zhong4': ['重', '众'], 'qia4': ['恰'], 'si4': ['似', '四', '思'], 'xin1': ['心', '新', '辛'],
+  'zhong1': ['中', '终', '钟'], 'si1': ['思', '丝', '私'], 'nian4': ['念'], 'bei4': ['被', '备', '倍'],
+  'dai4': ['戴', '带', '代'], 'shou3': ['手', '首'], 'wan4': ['腕', '万'], 'zhi1': ['之', '知', '只'],
+  'jian1': ['间', '坚', '尖'], 'yi1': ['一', '衣', '依'], 'peng4': ['碰'],
+
 // ======= 常用高频字扩充包  =======
 'ai4': ['爱', '碍', '艾', '唉'],
 'ba1': ['八', '吧', '巴', '扒'],
@@ -328,8 +302,8 @@ const pinyinDict = {
 'man4': ['慢', '漫'],
 'mang2': ['忙', '盲'],
 'mao2': ['毛', '矛'],
-'mei2': ['没', '眉', '媒'],
-'mei3': ['美', '每','莓'],
+'mei2': ['没', '眉', '媒', '莓'],
+'mei3': ['美', '每'],
 'men2': ['门'],
 'men5': ['们'],
 'meng4': ['梦', '孟'],
@@ -587,17 +561,13 @@ const pinyinDict = {
 'zuo2': ['昨'],
 'zuo3': ['左'],
 'zuo4': ['做', '作', '坐', '座']
-// ======= 扩充包结束 =======
-};
+}
 
 let memoryBank = {};
 try { memoryBank = JSON.parse(localStorage.getItem('cryptoMemory') || '{}'); } catch(e) {}
-
 let historyStack = [];
 
-// ==========================================
-// 3. 双拼转换逻辑 (修复单音字)
-// ==========================================
+// ================= 3. 双拼转换逻辑 =================
 function convertToShuangpin(pinyin) {
   if (!pinyin) return null;
   let initial = '', rest = pinyin;
@@ -615,22 +585,13 @@ function convertToShuangpin(pinyin) {
       if (zrmVowelMap[sub]) { mappedVowel = zrmVowelMap[sub] + rest.slice(len); break; }
     }
   }
-  // 【修复】不再重复单音字母，直接返回1个字母。
   return mappedInitial + mappedVowel;
 }
 
 function convertFromShuangpin(sp) {
   if (!sp || sp.length < 1) return null;
   const first = sp[0];
-  
-  // 【修复】取消重复字母 aa, oo, ee 的特殊判断
-
-  if (sp.length === 1) {
-      // 如果是单字母（如 a, o, e），直接返回该字母作为拼音
-      if (reverseVowelMap[first]) return reverseVowelMap[first][0];
-      return first;
-  }
-
+  if (sp.length === 1) { if (reverseVowelMap[first]) return reverseVowelMap[first][0]; return first; }
   const second = sp[1];
   if (!reverseInitialMap[first] && reverseVowelMap[first]) return reverseVowelMap[first][0];
   const initial = reverseInitialMap[first] || first;
@@ -652,9 +613,7 @@ function getPinyinForChar(char) {
   return null;
 }
 
-// ==========================================
-// 4. 加密与解密
-// ==========================================
+// ================= 4. 加密与解密 =================
 function encryptText() {
   let text = document.getElementById('inputText').value;
   if (!text) { setStatus('请输入原文', 'error'); return; }
@@ -678,7 +637,6 @@ function encryptText() {
 }
 
 let currentPinyinList = [];
-
 function decryptText() {
   let text = document.getElementById('inputText').value.trim();
   if (!text) { setStatus('请输入密文', 'error'); return; }
@@ -691,7 +649,6 @@ function decryptText() {
     else rawText += ch;
   }
 
-  // 【修复】正则改为 {1,2}，智能匹配 1个或2个字母
   const regex = /([a-z]{1,2})(→|↑|←|↓|\\)/g;
   let match, lastIndex = 0;
   currentPinyinList = [];
@@ -701,9 +658,7 @@ function decryptText() {
     const pinyin = convertFromShuangpin(match[1]);
     const toneNumber = reverseToneMap[match[2]] || 5;
     const pinyinWithTone = pinyin ? pinyin + toneNumber : match[1] + match[2];
-    currentPinyinList.push({ 
-      type: 'char', shuangpin: match[1], tone: match[2], key: pinyinWithTone, text: '' 
-    });
+    currentPinyinList.push({ type: 'char', shuangpin: match[1], tone: match[2], key: pinyinWithTone, text: '' });
     lastIndex = regex.lastIndex;
   }
   if (lastIndex < rawText.length) currentPinyinList.push({ type: 'raw', text: rawText.substring(lastIndex) });
@@ -712,36 +667,21 @@ function decryptText() {
   let i = 0;
   while (i < currentPinyinList.length) {
     const item = currentPinyinList[i];
-    if (item.type === 'raw') { 
-        finalChars.push({ type: 'raw', text: item.text }); 
-        i++; 
-        continue; 
-    }
+    if (item.type === 'raw') { finalChars.push({ type: 'raw', text: item.text }); i++; continue; }
 
-    let decodedChar = '';
-    let isMemory = false;
-    let currentPinyin = item.key;
-
-    let matchedWord = false;
+    let decodedChar = ''; let isMemory = false; let currentPinyin = item.key; let matchedWord = false;
     for (let len = 4; len >= 2; len--) {
         if (i + len - 1 < currentPinyinList.length) {
             let allChars = true;
-            for(let k=1; k<len; k++) {
-                if(currentPinyinList[i+k].type !== 'char') { allChars = false; break; }
-            }
+            for(let k=1; k<len; k++) { if(currentPinyinList[i+k].type !== 'char') { allChars = false; break; } }
             if (allChars) {
                 let wordPinyin = '';
-                for(let k=0; k<len; k++) {
-                    wordPinyin += (k>0?'_':'') + currentPinyinList[i+k].key;
-                }
+                for(let k=0; k<len; k++) { wordPinyin += (k>0?'_':'') + currentPinyinList[i+k].key; }
                 const wordKey = `W:${wordPinyin}`;
                 if (memoryBank[wordKey]) {
-                    decodedChar = memoryBank[wordKey];
-                    item.text = decodedChar;
+                    decodedChar = memoryBank[wordKey]; item.text = decodedChar;
                     finalChars.push({ type: 'char', text: decodedChar, key: wordKey, isMemory: true, index: i, length: len });
-                    i += len;
-                    matchedWord = true;
-                    break;
+                    i += len; matchedWord = true; break;
                 }
             }
         }
@@ -750,7 +690,6 @@ function decryptText() {
 
     let prevPinyin = (i > 0 && currentPinyinList[i-1].type === 'char') ? currentPinyinList[i-1].key : '';
     let nextPinyin = (i < currentPinyinList.length - 1 && currentPinyinList[i+1].type === 'char') ? currentPinyinList[i+1].key : '';
-
     const keyFull = `F:${prevPinyin}|${currentPinyin}|${nextPinyin}`;
     const keyPrev = `P:${prevPinyin}|${currentPinyin}`;
     const keyNext = `N:${currentPinyin}|${nextPinyin}`;
@@ -765,12 +704,10 @@ function decryptText() {
       if (candidates && candidates.length > 0) decodedChar = candidates[0];
       else decodedChar = `[${currentPinyin}]`;
     }
-
     item.text = decodedChar;
     finalChars.push({ type: 'char', text: decodedChar, key: currentPinyin, isMemory: isMemory, index: i, length: 1 });
     i++;
   }
-
   renderClickableOutput(finalChars);
   setStatus('解密完成。点击红色字可修正。', 'ok');
 }
@@ -791,53 +728,36 @@ function renderClickableOutput(finalChars) {
       span.className = 'clickable-char';
       if (item.isMemory) span.classList.add('corrected-char');
       span.innerText = item.text;
-      span.dataset.key = item.key;
-      span.dataset.index = item.index;
-      span.dataset.length = item.length; 
+      span.dataset.key = item.key; span.dataset.index = item.index; span.dataset.length = item.length; 
       span.onclick = () => correctChar(span);
       outputBox.appendChild(span);
     }
   }
 }
 
-// ---------- 记忆修改与撤回核心逻辑 ----------
 function correctChar(span) {
   const currentChar = span.innerText;
   const idx = parseInt(span.dataset.index);
-
-  let promptText = `当前是「${currentChar}」。\n请输入正确的字或词组（如“真美”、“珍珠”、“那真珠”）：`;
+  let promptText = `当前是「${currentChar}」。\n请输入正确的字或词组：`;
   if (currentChar.startsWith('[')) promptText = `字典没收录这个音。\n请输入对应的字或词组：`;
-  
   const userInput = prompt(promptText, currentChar.startsWith('[') ? '' : currentChar);
   if (!userInput || userInput === currentChar) return;
   const inputChars = Array.from(userInput.trim());
-
   if (inputChars.length === 0) return;
 
   let availableChars = 0;
   for (let k = 0; k < inputChars.length; k++) {
-      if (idx + k < currentPinyinList.length && currentPinyinList[idx + k].type === 'char') {
-          availableChars++;
-      } else {
-          break; 
-      }
+      if (idx + k < currentPinyinList.length && currentPinyinList[idx + k].type === 'char') availableChars++;
+      else break; 
   }
-
-  if (availableChars < inputChars.length) {
-      setStatus(`当前上下文不足以合并这么长的词组（需要 ${inputChars.length} 个字，但后面只有 ${availableChars} 个）`, 'error');
-      return;
-  }
+  if (availableChars < inputChars.length) { setStatus(`上下文不足以合并`, 'error'); return; }
 
   historyStack.push(JSON.parse(JSON.stringify(memoryBank)));
   if (historyStack.length > 30) historyStack.shift(); 
 
   let wordPinyin = '';
-  for (let k = 0; k < inputChars.length; k++) {
-      wordPinyin += (k > 0 ? '_' : '') + currentPinyinList[idx + k].key;
-  }
-
-  const wordKey = `W:${wordPinyin}`;
-  memoryBank[wordKey] = userInput;
+  for (let k = 0; k < inputChars.length; k++) { wordPinyin += (k > 0 ? '_' : '') + currentPinyinList[idx + k].key; }
+  memoryBank[`W:${wordPinyin}`] = userInput;
   
   if (inputChars.length === 1) {
       const pinyinKey = currentPinyinList[idx].key;
@@ -848,83 +768,49 @@ function correctChar(span) {
       memoryBank[`N:${pinyinKey}|${nextPinyin}`] = userInput;
       memoryBank[`S:${pinyinKey}`] = userInput;
   }
-
   setStatus(`已记住搭配：${userInput}`, 'ok');
 
   const parent = span.parentElement;
   const allSpans = Array.from(parent.querySelectorAll('.clickable-char'));
   const currentSpanIdx = allSpans.indexOf(span);
-
-  span.innerText = inputChars[0];
-  span.classList.add('corrected-char');
-  span.dataset.length = inputChars.length;
-
+  span.innerText = inputChars[0]; span.classList.add('corrected-char'); span.dataset.length = inputChars.length;
   for (let k = 1; k < inputChars.length; k++) {
       if (currentSpanIdx + k < allSpans.length) {
           const nextSpan = allSpans[currentSpanIdx + k];
-          nextSpan.innerText = inputChars[k];
-          nextSpan.classList.add('corrected-char');
-          nextSpan.dataset.length = 0; 
+          nextSpan.innerText = inputChars[k]; nextSpan.classList.add('corrected-char'); nextSpan.dataset.length = 0; 
       }
   }
-
   try { localStorage.setItem('cryptoMemory', JSON.stringify(memoryBank)); } catch(e) {}
 }
 
-// ---------- 撤回功能 ----------
 function undoLast() {
-  if (historyStack.length === 0) {
-    setStatus('没有可以撤回的操作了', 'error');
-    return;
-  }
+  if (historyStack.length === 0) { setStatus('没有可以撤回的操作了', 'error'); return; }
   memoryBank = historyStack.pop(); 
   try { localStorage.setItem('cryptoMemory', JSON.stringify(memoryBank)); } catch(e) {}
-  
-  decryptText();
-  setStatus('已撤回上一步修改', 'ok');
+  decryptText(); setStatus('已撤回上一步修改', 'ok');
 }
 
-// ==========================================
-// 5. 记忆库管理
-// ==========================================
 function exportMemory() {
   const data = JSON.stringify(memoryBank);
   if (data === '{}') { alert('记忆库为空'); return; }
-  const textarea = document.createElement('textarea');
-  textarea.value = data;
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand('copy');
-  document.body.removeChild(textarea);
-  prompt('记忆库已复制！请粘贴到备忘录保存。下次使用前，点“导入记忆库”粘贴此内容：', data);
+  const textarea = document.createElement('textarea'); textarea.value = data; document.body.appendChild(textarea); textarea.select();
+  document.execCommand('copy'); document.body.removeChild(textarea);
+  prompt('记忆库已复制！请粘贴到备忘录保存：', data);
 }
 
 function importMemory() {
   const data = prompt('请粘贴之前导出的记忆库内容：');
   if (!data) return;
-  try {
-    memoryBank = { ...memoryBank, ...JSON.parse(data) };
-    localStorage.setItem('cryptoMemory', JSON.stringify(memoryBank));
-    setStatus('记忆库导入成功！', 'ok');
-  } catch(e) { setStatus('导入失败，数据格式不正确', 'error'); }
+  try { memoryBank = { ...memoryBank, ...JSON.parse(data) }; localStorage.setItem('cryptoMemory', JSON.stringify(memoryBank)); setStatus('记忆库导入成功！', 'ok'); }
+  catch(e) { setStatus('导入失败，数据格式不正确', 'error'); }
 }
 
 function clearMemory() {
-  if (confirm('确定要清空所有记忆库吗？这将删除你所有的纠正记录！')) {
-    memoryBank = {};
-    historyStack = [];
-    localStorage.removeItem('cryptoMemory');
-    setStatus('记忆库已清空', 'ok');
-  }
+  if (confirm('确定要清空所有记忆库吗？')) { memoryBank = {}; historyStack = []; localStorage.removeItem('cryptoMemory'); setStatus('记忆库已清空', 'ok'); }
 }
 
-// ==========================================
-// 6. 辅助 UI
-// ==========================================
 function setStatus(msg, type = '') {
-  const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = 'status ' + type;
+  const el = document.getElementById('status'); el.textContent = msg; el.className = 'status ' + type;
 }
 
 function copyResult() {
@@ -932,17 +818,119 @@ function copyResult() {
   const text = outputBox.innerText || outputBox.textContent;
   if (!text.trim()) { setStatus('没有可复制的内容', 'error'); return; }
   navigator.clipboard.writeText(text).then(() => setStatus('已复制到剪贴板', 'ok')).catch(() => {
-    const range = document.createRange(); range.selectNode(outputBox);
-    window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+    const range = document.createRange(); range.selectNode(outputBox); window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
     document.execCommand('copy'); setStatus('已复制到剪贴板', 'ok');
   });
 }
 
 function clearAll() {
-  document.getElementById('inputText').value = '';
-  document.getElementById('outputText').innerHTML = '';
-  historyStack = [];
-  setStatus('');
+  document.getElementById('inputText').value = ''; document.getElementById('outputText').innerHTML = ''; historyStack = []; setStatus('');
+}
+
+// ================= 5. 魔法阵生成与解析 =================
+const colorPalette = ['#FF3366', '#00E5FF', '#FFD700', '#39FF14', '#FF00FF', '#FF8800', '#8A2BE2', '#00FF7F', '#1E90FF', '#FF1493', '#FFA500', '#00CED1', '#9400D3', '#32CD32', '#FF4500', '#4682B4', '#DAA520', '#6A5ACD', '#20B2AA', '#FF69B4', '#7FFFD4', '#DC143C', '#00BFFF', '#FF8C00', '#B22222', '#9ACD32', '#4B0082', '#FF6347', '#48D1CC', '#FFFF00', '#FFFFFF', '#808080'];
+const charSet = ['＊', '；', '→', '↑', '←', '↓', '\\', '１', '２', '３', '４', '５', '６', '７', '８', '９', '０', '～', '＠', '＃', '！', '％', '＆', '（', '）', '｀', '／', '－', '＿', '：', '？', '，'];
+const charToColor = {}; const colorToChar = {};
+charSet.forEach((char, i) => { const color = colorPalette[i % colorPalette.length]; charToColor[char] = color; colorToChar[color] = char; });
+
+function getHexCenter(cx, cy, radius, angle) { return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) }; }
+
+function drawHexagon(ctx, x, y, size, color) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 3) * i; const px = x + size * Math.cos(angle); const py = y + size * Math.sin(angle);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+}
+
+function toFullWidth(str) {
+  return str.split('').map(c => {
+      const code = c.charCodeAt(0);
+      if (code === 32) return c; 
+      if (code >= 33 && code <= 126) return String.fromCharCode(code + 65248); 
+      return c;
+  }).join('');
+}
+
+function generateMagicArray() {
+  let inputVal = document.getElementById('inputText').value.trim();
+  let cipherText = '';
+  if (!inputVal) {
+      cipherText = document.getElementById('outputText').innerText.trim();
+      if (!cipherText) { setStatus('请先输入中文或密文', 'error'); return; }
+  } else if (/[\u4e00-\u9fa5]/.test(inputVal)) {
+      encryptText(); cipherText = document.getElementById('outputText').innerText.trim();
+  } else {
+      cipherText = toFullWidth(inputVal);
+  }
+  if (!cipherText) { setStatus('没有可生成的密文', 'error'); return; }
+  if (cipherText.length > 120) { setStatus('密文过长，最多支持120个字符', 'error'); return; }
+
+  const canvas = document.createElement('canvas'); canvas.width = 800; canvas.height = 800; const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0a0a1a'; ctx.fillRect(0, 0, 800, 800);
+  const cx = 400, cy = 400; const radiusStep = 45; const hexSize = 22;
+
+  ctx.beginPath(); ctx.arc(cx, cy, 350, 0, 2 * Math.PI); ctx.strokeStyle = 'rgba(0, 229, 255, 0.2)'; ctx.lineWidth = 5; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, 370, 0, 2 * Math.PI); ctx.strokeStyle = 'rgba(255, 51, 102, 0.2)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI / 3) * i; const x = cx + 350 * Math.cos(angle); const y = cy + 350 * Math.sin(angle);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath(); ctx.strokeStyle = 'rgba(0, 229, 255, 0.3)'; ctx.stroke();
+
+  let charIndex = 0; let ring = 1; const maxRings = 5;
+  while (charIndex < cipherText.length && ring <= maxRings) {
+    const hexCount = 6 * ring; const radius = ring * radiusStep;
+    for (let i = 0; i < hexCount; i++) {
+      if (charIndex >= cipherText.length) break;
+      const angle = (2 * Math.PI * i) / hexCount; const pos = getHexCenter(cx, cy, radius, angle);
+      const char = cipherText[charIndex]; const color = charToColor[char] || '#808080'; 
+      drawHexagon(ctx, pos.x, pos.y, hexSize, color); charIndex++;
+    }
+    ring++;
+  }
+  const link = document.createElement('a'); link.download = `魔法阵_${Date.now()}.png`; link.href = canvas.toDataURL('image/png'); link.click();
+  setStatus('魔法阵生成成功！请通过【原图/文件】发送给朋友。', 'ok');
+}
+
+function importMagicArray(event) {
+  const file = event.target.files[0]; if (!file) return; setStatus('正在解析魔法阵...', 'ok');
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
+      const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0);
+      const scaleX = img.width / 800; const scaleY = img.height / 800;
+      const cx = 400 * scaleX, cy = 400 * scaleY; const radiusStep = 45 * scaleX;
+      let cipherText = ''; let ring = 1; const maxRings = 5;
+      while (ring <= maxRings) {
+        const hexCount = 6 * ring; const radius = ring * radiusStep;
+        for (let i = 0; i < hexCount; i++) {
+          const angle = (2 * Math.PI * i) / hexCount; const pos = getHexCenter(cx, cy, radius, angle);
+          const pixel = ctx.getImageData(Math.round(pos.x), Math.round(pos.y), 1, 1).data; const r = pixel[0], g = pixel[1], b = pixel[2];
+          let closestChar = ''; let minDistance = Infinity;
+          for (const [hex, char] of Object.entries(colorToChar)) {
+              const cr = parseInt(hex.slice(1, 3), 16); const cg = parseInt(hex.slice(3, 5), 16); const cb = parseInt(hex.slice(5, 7), 16);
+              const dist = Math.sqrt((r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2);
+              if (dist < minDistance) { minDistance = dist; closestChar = char; }
+          }
+          if (minDistance > 150 || (r < 30 && g < 30 && b < 50)) { /* 背景跳过 */ } 
+          else if (closestChar) { cipherText += closestChar; }
+        }
+        ring++;
+      }
+      if (!cipherText) { setStatus('未能在图片中识别出魔法阵数据。', 'error'); return; }
+      if (!cipherText.includes('→') && !cipherText.includes('↑') && !cipherText.includes('←') && !cipherText.includes('↓') && !cipherText.includes('\\')) {
+          setStatus('解析失败：未能识别出声调箭头，请确保使用【原图】传输！', 'error'); return;
+      }
+      document.getElementById('inputText').value = cipherText; decryptText(); setStatus('魔法阵解析完成，已尝试解密。', 'ok');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 </script>
 </body>
