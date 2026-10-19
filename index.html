@@ -837,16 +837,17 @@ function extractAudioStego(event) {
           audioBytes[i] = parseInt(byteString, 2);
       }
 
+       // 【关键修复】用 audio/mp4 或 audio/webm 尝试播放，并提供下载按钮
       const audioBlob = new Blob([audioBytes], { type: 'audio/webm' });
       const audioUrl = URL.createObjectURL(audioBlob);
       
-      debugOutput.innerHTML = `
-        <div style="padding: 10px; font-family: monospace; font-size: 12px; color: #94a3b8; margin-bottom: 10px;">
-            <div style="white-space: pre-wrap;">${debugMsg}</div>
-        </div>
-        <div style="text-align: center; padding: 10px;">
+      const outputBox = document.getElementById('outputText');
+      outputBox.innerHTML = `
+        <div style="text-align: center; padding: 20px;">
             <p style="color: #22c55e; font-weight: bold; font-size: 18px;">🎵 提取成功！找到一段隐秘的语音</p>
             <audio controls src="${audioUrl}" style="width: 100%; margin-top: 10px;"></audio>
+            <p style="font-size: 12px; color: #94a3b8; margin-top: 15px;">如果上方无法播放，说明浏览器不支持该音频格式。请点击下方按钮下载：</p>
+            <a href="${audioUrl}" download="隐秘语音_${Date.now()}.webm" style="display: inline-block; margin-top: 10px; padding: 10px 20px; background: #0ea5e9; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">⬇️ 下载语音文件</a>
         </div>
       `;
       setStatus('语音提取成功！请点击播放。', 'ok');
