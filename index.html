@@ -792,32 +792,59 @@ function extractAudioStego(event) {
         bitString += (data[i] & 1).toString(); 
       }
 
-      if (bitString.length < 64) { setStatus('图片太小或没有隐藏数据。', 'error'); return; }
+      // 打印调试信息到结果框
+      const debugOutput = document.getElementById('outputText');
+      let debugMsg = `图片尺寸: ${img.width}x${img.height}\n`;
+      debugMsg += `提取的总二进制位数: ${bitString.length}\n`;
+
+      if (bitString.length < 64) { 
+          debugOutput.innerText = debugMsg + `错误：图片数据太少，没有隐藏数据。`; 
+          setStatus('提取失败', 'error'); 
+          return; 
+      }
+
       const magicBytes = new Uint8Array(4);
       for (let i = 0; i < 4; i++) magicBytes[i] = parseInt(bitString.slice(i * 8, (i + 1) * 8), 2);
 
+      debugMsg += `文件头标志: ${magicBytes.join(',')} (如果是65,85,68,73则正确)\n`;
+
       if (magicBytes[0] !== 65 || magicBytes[1] !== 85 || magicBytes[2] !== 68 || magicBytes[3] !== 73) {
-          setStatus('未在这张照片里发现隐藏的语音（可能是文字，或已被压缩损坏）。', 'error');
+          debugOutput.innerText = debugMsg + `错误：这不是一段隐藏的语音（或者照片被压缩过，数据损坏了）。`;
+          setStatus('未发现语音数据', 'error');
           return;
       }
 
       const lengthBytes = new Uint8Array(4);
       for (let i = 0; i < 4; i++) lengthBytes[i] = parseInt(bitString.slice(32 + i * 8, 32 + (i + 1) * 8), 2);
       const audioLength = new DataView(lengthBytes.buffer).getUint32(0, true);
+      
+      debugMsg += `解析出的音频长度: ${audioLength} 字节\n`;
+
+      if (audioLength <= 0 || audioLength > 5000000) {
+          debugOutput.innerText = debugMsg + `错误：音频长度异常，数据已损坏。`;
+          setStatus('音频数据损坏', 'error');
+          return;
+      }
 
       const audioBytes = new Uint8Array(audioLength);
       for (let i = 0; i < audioLength; i++) {
           const byteString = bitString.slice(64 + i * 8, 64 + (i + 1) * 8);
-          if (byteString.length < 8) { setStatus('音频数据不完整。', 'error'); return; }
+          if (byteString.length < 8) { 
+              debugOutput.innerText = debugMsg + `错误：读取到一半图片数据不够了。`;
+              setStatus('音频被截断', 'error');
+              return; 
+          }
           audioBytes[i] = parseInt(byteString, 2);
       }
 
       const audioBlob = new Blob([audioBytes], { type: 'audio/webm' });
       const audioUrl = URL.createObjectURL(audioBlob);
       
-      const outputBox = document.getElementById('outputText');
-      outputBox.innerHTML = `
-        <div style="text-align: center; padding: 20px;">
+      debugOutput.innerHTML = `
+        <div style="padding: 10px; font-family: monospace; font-size: 12px; color: #94a3b8; margin-bottom: 10px;">
+            <div style="white-space: pre-wrap;">${debugMsg}</div>
+        </div>
+        <div style="text-align: center; padding: 10px;">
             <p style="color: #22c55e; font-weight: bold; font-size: 18px;">🎵 提取成功！找到一段隐秘的语音</p>
             <audio controls src="${audioUrl}" style="width: 100%; margin-top: 10px;"></audio>
         </div>
