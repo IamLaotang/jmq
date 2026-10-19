@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>语言加密器（魔法阵+隐写版）</title>
+<title>语言加密器（魔法阵版）</title>
 <style>
   :root {
     --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --sub: #94a3b8;
@@ -58,7 +58,7 @@
 <body>
 <div class="app">
   <h1>🔐 语言加密器</h1>
-  <div class="sub">自然码双拼 → 声调箭头 → 键盘符号 → 魔法阵与隐写</div>
+  <div class="sub">自然码双拼 → 声调箭头 → 键盘符号 → 魔法阵</div>
   
   <div class="card">
     <label for="inputText">输入原文（中文）或密文</label>
@@ -68,22 +68,17 @@
       <button class="primary" onclick="encryptText()">加密</button>
       <button class="success" onclick="decryptText()">解密</button>
       <button class="undo" onclick="generateMagicArray()">🔮 生成魔法阵</button>
-      <button class="undo" onclick="document.getElementById('imageUpload').click()">📥 导入魔法阵解密</button>
-      <button class="info" onclick="document.getElementById('stegoUpload').click()">🔏 隐藏文字到照片</button>
-      <button class="info" onclick="document.getElementById('stegoExtract').click()">🔍 从照片提取文字</button>
-      <button class="info" onclick="document.getElementById('stegoAudioUpload').click()">🎙️ 录音并存入照片</button>
-      <button class="info" onclick="document.getElementById('stegoAudioExtract').click()">🔊 从照片提取语音</button>
+      <button class="undo" onclick="document.getElementById('imageUpload').click()">📥 导入魔法阵解密
+<button class="info" onclick="document.getElementById('stegoUpload').click()">🔏 隐藏文字到照片</button>
+<button class="info" onclick="document.getElementById('stegoExtract').click()">🔍 从照片提取文字</button>
+<input type="file" id="stegoUpload" accept="image/png, image/jpeg" style="display: none;" onchange="hideTextInImage(event)">
+<input type="file" id="stegoExtract" accept="image/png, image/jpeg" style="display: none;" onchange="extractTextFromImage(event)">
+</button>
+      <input type="file" id="imageUpload" accept="image/png, image/jpeg" style="display: none;" onchange="importMagicArray(event)">
       <button onclick="copyResult()">复制结果</button>
       <button class="undo" onclick="undoLast()">↩️ 撤回上一步</button>
       <button class="danger" onclick="clearAll()">清空</button>
     </div>
-
-    <!-- 隐藏的文件上传控件，千万不要挤在一起 -->
-    <input type="file" id="imageUpload" accept="image/png, image/jpeg" style="display: none;" onchange="importMagicArray(event)">
-    <input type="file" id="stegoUpload" accept="image/png, image/jpeg" style="display: none;" onchange="hideTextInImage(event)">
-    <input type="file" id="stegoExtract" accept="image/png, image/jpeg" style="display: none;" onchange="extractTextFromImage(event)">
-    <input type="file" id="stegoAudioUpload" accept="image/png, image/jpeg" style="display: none;" onchange="startAudioStego(event)">
-    <input type="file" id="stegoAudioExtract" accept="image/png, image/jpeg" style="display: none;" onchange="extractAudioStego(event)">
 
     <label>结果（点击<span style="color:#fca5a5;">红色字</span>可纠正，纠正后变绿）</label>
     <div id="outputText" class="output-box"></div>
@@ -101,16 +96,20 @@
 // ================= 1. 核心映射表 =================
 const zrmInitialMap = { 'b':'b', 'p':'p', 'm':'m', 'f':'f', 'd':'d', 't':'t', 'n':'n', 'l':'l', 'g':'g', 'k':'k', 'h':'h', 'j':'j', 'q':'q', 'x':'x', 'r':'r', 'z':'z', 'c':'c', 's':'s', 'y':'y', 'w':'w', 'zh':'v', 'ch':'i', 'sh':'u' };
 const reverseInitialMap = {}; for (const [k, v] of Object.entries(zrmInitialMap)) reverseInitialMap[v] = k;
+
 const zrmVowelMap = { 'a':'a', 'o':'o', 'e':'e', 'i':'i', 'u':'u', 'v':'v', 'ai':'l', 'ei':'z', 'ui':'v', 'ao':'k', 'ou':'b', 'iu':'q', 'ie':'x', 've':'t', 'an':'j', 'en':'f', 'in':'n', 'un':'p', 'vn':'p', 'ang':'h', 'eng':'g', 'ing':'y', 'ong':'s', 'ia':'w', 'iao':'c', 'ian':'m', 'iang':'d', 'iong':'s', 'ua':'w', 'uo':'o', 'uai':'y', 'uan':'r', 'uang':'d', 'ue':'t', 'van':'r' };
 const reverseVowelMap = {}; for (const [k, v] of Object.entries(zrmVowelMap)) { if (!reverseVowelMap[v]) reverseVowelMap[v] = []; reverseVowelMap[v].push(k); }
+
 const keyboardMap = { 'q':'１','w':'２','e':'３','r':'４','t':'５','y':'６','u':'７','i':'８','o':'９','p':'０','a':'～','s':'＠','d':'＃','f':'！','g':'％','h':'＆','j':'＊','k':'（','l':'）','z':'｀','x':'／','c':'－','v':'＿','b':'：','n':'；','m':'？' };
 const reverseKeyboardMap = {}; for (const [k, v] of Object.entries(keyboardMap)) reverseKeyboardMap[v] = k;
+
 const toneMap = { 1:'→', 2:'↑', 3:'←', 4:'↓', 5:'\\' };
 const reverseToneMap = { '→':1, '↑':2, '←':3, '↓':4, '\\':5 };
+
 const punctPlaceholder = { '，': '\uE000', '。': '\uE001', '！': '\uE002', '？': '\uE003', '；': '\uE004', '：': '\uE005', '、': '\uE006', '“': '\uE007', '”': '\uE008', '‘': '\uE009', '’': '\uE00A', '（': '\uE00B', '）': '\uE00C', '【': '\uE00D', '】': '\uE00E', '《': '\uE00F', '》': '\uE010', ' ': '\uE011', '\n': '\uE012' };
 const reversePunctPlaceholder = {}; for (const [k, v] of Object.entries(punctPlaceholder)) reversePunctPlaceholder[v] = k;
 
-// ================= 2. 拼音字典 =================
+// ================= 2. 拼音字典 (精简版，可自行扩充) =================
 const pinyinDict = {
   'de5': ['的', '得', '地'], 'le5': ['了'], 'shi4': ['是', '事', '市'], 'zai4': ['再', '在'],
   'bu4': ['不'], 'ren2': ['人'], 'you3': ['有', '友'], 'wo3': ['我'], 'ta1': ['他', '她', '它'],
@@ -134,80 +133,440 @@ const pinyinDict = {
   'zhong1': ['中', '终', '钟'], 'si1': ['思', '丝', '私'], 'nian4': ['念'], 'bei4': ['被', '备', '倍'],
   'dai4': ['戴', '带', '代'], 'shou3': ['手', '首'], 'wan4': ['腕', '万'], 'zhi1': ['之', '知', '只'],
   'jian1': ['间', '坚', '尖'], 'yi1': ['一', '衣', '依'], 'peng4': ['碰'],
-  'ai4': ['爱', '碍', '艾', '唉'], 'ba1': ['八', '吧', '巴', '扒'], 'ba4': ['爸', '罢', '霸'], 'bai2': ['白'],
-  'bai3': ['百', '摆'], 'ban4': ['半', '办', '伴', '扮'], 'bao3': ['宝', '保', '饱'], 'bei3': ['北'], 'ben3': ['本'],
-  'bi3': ['比', '笔', '彼'], 'bie2': ['别'], 'bing4': ['病', '并'], 'bo1': ['波', '播', '拨'], 'bu4': ['不', '部', '步', '布'],
-  'cai2': ['才', '材', '财'], 'cai3': ['采', '彩', '踩'], 'cao3':['草'], 'can1': ['参', '餐'], 'che1': ['车'],
-  'cheng2': ['成', '城', '程', '诚'], 'chi1': ['吃'], 'chu1': ['出', '初'], 'chu3': ['处', '楚'], 'chuan2': ['船', '传'],
-  'ci3': ['此'], 'cong2': ['从', '丛'], 'cuo4': ['错', '措'], 'da2': ['答', '达'], 'da3': ['打'], 'dan1': ['单', '担'],
-  'dan4': ['但', '蛋', '淡'], 'deng3': ['等'], 'di1': ['低', '滴'], 'di2': ['敌', '笛'], 'di3': ['底', '抵'],
-  'dian3': ['点', '典'], 'dian4': ['电', '店', '殿'], 'dong1': ['东', '冬'], 'dong4': ['动', '洞', '冻'], 'du1': ['读', '都', '督'],
-  'du4': ['度', '渡', '肚'], 'duan3': ['短'], 'duan4': ['段', '断', '锻'], 'dui4': ['对', '队'], 'duo1': ['多'],
-  'er2': ['儿', '而'], 'er4': ['二'], 'fa1': ['发'], 'fan3': ['反', '返'], 'fan4': ['饭', '犯', '范'], 'fang1': ['方', '芳'],
-  'fang2': ['房', '防', '妨'], 'fang4': ['放'], 'fei1': ['飞', '非'], 'fen1': ['分', '芬'], 'feng1': ['风', '封', '丰'],
-  'fu2': ['服', '福', '扶'], 'fu4': ['父', '付', '附', '负'], 'gao1': ['高', '糕'], 'gao4': ['告'], 'ge1': ['歌', '哥', '割'],
-  'gen1': ['跟', '根'], 'geng4': ['更'], 'gong1': ['工', '公', '功', '攻'], 'gong4': ['共', '供'], 'gou4': ['够', '构', '购'],
-  'gu3': ['古', '股', '鼓'], 'gu4': ['故', '顾', '固'], 'guan1': ['关', '观', '官'], 'guan3': ['管', '馆'], 'guang1': ['光'],
-  'gui1': ['归', '规'], 'guo2': ['国'], 'hai2': ['还', '孩'], 'hai3': ['海'], 'han2': ['寒', '含', '韩'], 'hao4': ['号', '浩'],
-  'he2': ['和', '合', '河', '何'], 'he1': ['喝', '呵'], 'hei1': ['黑'], 'hen3': ['很', '狠'], 'hong2': ['红', '洪'],
-  'hou4': ['后', '候', '厚'], 'hu2': ['湖', '胡', '壶'], 'hu4': ['户', '护', '互'], 'hua1': ['花'], 'hua4': ['话', '画', '化'],
-  'huan1': ['欢'], 'huan5': ['欢'], 'huan2': ['还', '环'], 'huang2': ['黄', '皇'], 'hui4': ['会', '汇', '惠'],
-  'huo3': ['火', '伙'], 'huo4': ['或', '货', '获'], 'ji1': ['机', '基', '积', '击'], 'ji2': ['及', '级', '极', '急'],
-  'ji3': ['几', '己', '挤'], 'ji4': ['记', '计', '技', '季'], 'jia1': ['家', '加', '佳'], 'jia3': ['假', '甲'], 'jia4': ['价', '架', '驾'],
-  'jian3': ['减', '简', '检'], 'jiang1': ['江', '将', '姜'], 'jiang3': ['讲', '奖'], 'jiao1': ['交', '教', '焦'], 'jiao3': ['脚', '角', '饺'],
-  'jiao4': ['叫', '较', '教'], 'jie1': ['接', '街', '阶'], 'jie2': ['节', '结', '杰'], 'jie3': ['姐', '解'], 'jie4': ['界', '介', '借', '戒'],
-  'jing1': ['经', '京', '惊', '精'], 'jing3': ['井', '景', '警'], 'jing4': ['静', '净', '竟', '境'], 'jiu3': ['九', '久', '酒'],
-  'jiu4': ['就', '旧', '救'], 'ju2': ['局', '菊'], 'ju3': ['举'], 'ju4': ['句', '巨', '具', '剧'], 'jue2': ['觉', '决', '绝'],
-  'kai1': ['开'], 'kan4': ['看'], 'ke3': ['可'], 'ke4': ['客', '课', '刻'], 'kong1': ['空'], 'kou3': ['口'],
-  'ku3': ['苦'], 'kuai4': ['快', '块'], 'kuan1': ['宽'], 'la1': ['拉'], 'lan2': ['蓝', '兰', '栏'], 'lao3': ['老'],
-  'lei4': ['累', '泪', '类'], 'leng3': ['冷'], 'li2': ['离', '梨', '黎'], 'li3': ['里', '理', '李', '礼'], 'li4': ['力', '立', '利', '历'],
-  'lian2': ['连', '联', '怜'], 'liang3': ['两'], 'liang4': ['亮', '量', '辆'], 'liao3': ['了'], 'lin2': ['林', '临', '邻'],
-  'ling2': ['零', '灵', '铃'], 'liu2': ['流', '留', '刘'], 'long2': ['龙', '隆'], 'lu4': ['路', '露', '陆'], 'lv3': ['旅', '铝'],
-  'lv4': ['绿', '律', '虑'], 'luo4': ['落', '洛', '络'], 'ma1': ['妈', '抹'], 'ma3': ['马', '码'], 'mai3': ['买'],
-  'mai4': ['卖', '麦'], 'man4': ['慢', '漫'], 'mang2': ['忙', '盲'], 'mao2': ['毛', '矛'], 'mei2': ['没', '眉', '媒', '莓'],
-  'men2': ['门'], 'meng4': ['梦', '孟'], 'mi3': ['米'], 'mian4': ['面'], 'min2': ['民'], 'ming2': ['明', '名', '鸣'],
-  'ming4': ['命'], 'mu3': ['母'], 'mu4': ['木', '目', '幕', '牧'], 'na2': ['拿'], 'na3': ['哪'], 'nan2': ['南', '男', '难'],
-  'nan4': ['难'], 'nei4': ['内'], 'neng2': ['能'], 'nian2': ['年', '粘'], 'niao3': ['鸟'], 'nin2': ['您'],
-  'niu2': ['牛'], 'nong2': ['农', '浓'], 'nv3': ['女'], 'pai2': ['排', '牌'], 'pao3': ['跑'], 'peng2': ['朋', '棚'],
-  'pi2': ['皮', '疲'], 'pian4': ['片', '骗'], 'piao4': ['票', '漂'], 'pin3': ['品'], 'ping2': ['平', '苹', '评'],
-  'po4': ['破', '迫'], 'pu3': ['普', '谱'], 'qi1': ['七', '期', '妻', '欺'], 'qi2': ['其', '奇', '齐', '骑'], 'qi4': ['气', '汽', '器', '弃'],
-  'qian2': ['前', '钱', '潜'], 'qian3': ['浅', '遣'], 'qiang2': ['强', '墙'], 'qiao1': ['敲', '悄'], 'qie4': ['切', '且'],
-  'qin1': ['亲', '侵'], 'qing2': ['情', '晴'], 'qing3': ['请', '顷'], 'qiu2': ['求', '球', '秋'], 'qu1': ['区', '曲', '驱'],
-  'qu3': ['取', '曲'], 'qu4': ['去', '趣'], 'quan2': ['全', '权', '泉'], 'que4': ['却', '确', '缺'], 'ran2': ['然', '燃'],
-  'rang4': ['让'], 're4': ['热'], 'ren4': ['认', '任', '刃'], 'ri4': ['日'], 'rong2': ['容', '荣', '融'], 'rou4': ['肉'],
-  'ru2': ['如'], 'ru4': ['入'], 'san1': ['三'], 'sha1': ['沙', '杀'], 'shan1': ['山', '删', '衫'], 'shang1': ['商', '伤'],
-  'shang4': ['上', '尚'], 'shao3': ['少'], 'she4': ['设', '社', '射'], 'shen1': ['身', '深', '伸'], 'shen2': ['神', '什'],
-  'shen4': ['甚', '渗'], 'sheng4': ['胜', '圣', '剩'], 'shi1': ['师', '失', '诗', '施'], 'shi3': ['使', '史', '始'],
-  'shou1': ['收'], 'shou4': ['受', '授', '售'], 'shu1': ['书', '输', '舒'], 'shu3': ['数', '属', '鼠'], 'shui3': ['水'],
-  'shui4': ['睡', '税'], 'shuo1': ['说'], 'si3': ['死'], 'song4': ['送', '宋', '松'], 'su4': ['速', '素', '诉'],
-  'suan4': ['算', '酸'], 'sui1': ['虽'], 'sui2': ['随'], 'sui4': ['岁', '碎'], 'sun1': ['孙'], 'suo3': ['所', '锁', '索'],
-  'tan2': ['谈', '弹', '坛'], 'tang2': ['糖', '堂', '唐'], 'tao2': ['逃', '桃', '陶'], 'te4': ['特'], 'ti2': ['提', '题', '蹄'],
-  'ti3': ['体'], 'tian2': ['田', '甜', '填'], 'tiao2': ['条', '调'], 'ting1': ['听', '厅'], 'ting2': ['停', '庭', '挺'],
-  'tong1': ['通'], 'tong2': ['同', '童', '铜'], 'tou2': ['头', '投'], 'tu2': ['图', '途', '徒'], 'tu3': ['土', '吐'],
-  'tuan2': ['团'], 'tui1': ['推'], 'tui4': ['退', '腿'], 'wan2': ['完', '玩', '丸'], 'wang2': ['王', '亡'],
-  'wang3': ['往', '网', '枉'], 'wang4': ['忘', '望', '旺'], 'wei2': ['为', '围', '维', '违'], 'wei3': ['委', '伟', '尾'],
-  'wen2': ['文', '闻', '蚊'], 'wen3': ['稳', '吻'], 'wen4': ['问'], 'wu2': ['无', '吴', '屋'], 'wu3': ['五', '午', '武', '舞'],
-  'wu4': ['物', '务', '误', '雾'], 'xi1': ['西', '吸', '希', '息'], 'xi3': ['喜', '洗', '习'], 'xi4': ['系', '细', '戏', '席'],
-  'xia4': ['下', '夏', '吓'], 'xian1': ['先', '鲜', '仙'], 'xian2': ['闲', '贤', '弦'], 'xiang1': ['相', '香', '乡', '箱'],
-  'xiao3': ['小', '晓'], 'xiao4': ['笑', '校', '效'], 'xie3': ['写', '血'], 'xie4': ['谢', '解', '械'], 'xin4': ['信'],
-  'xing1': ['星', '兴', '猩'], 'xing2': ['行', '形', '型'], 'xing4': ['姓', '性', '幸'], 'xiong1': ['兄', '胸', '凶'],
-  'xiu1': ['休', '修', '羞'], 'xu1': ['需', '须', '虚'], 'xu3': ['许'], 'xu4': ['续', '序', '叙'], 'xuan3': ['选'],
-  'xue2': ['学', '穴'], 'xue3': ['雪'], 'xun2': ['寻', '询', '巡'], 'ya1': ['压', '呀', '押'], 'ya3': ['雅'],
-  'yan2': ['严', '研', '盐', '颜'], 'yan3': ['眼', '演', '掩'], 'yan4': ['验', '燕', '宴'], 'yang2': ['阳', '羊', '洋', '扬'],
-  'yang3': ['养', '氧', '痒'], 'yang4': ['样'], 'yao4': ['要', '药', '耀'], 'ye4': ['夜', '业', '叶', '页'], 'yi2': ['移', '疑', '仪', '姨'],
-  'yin1': ['因', '音', '阴', '姻'], 'yin2': ['银', '吟', '引'], 'yin3': ['引', '饮', '隐'], 'yin4': ['印'], 'ying1': ['应', '英', '鹰', '婴'],
-  'ying2': ['迎', '赢', '营', '蝇'], 'ying3': ['影'], 'ying4': ['硬', '映', '应'], 'yong3': ['永', '勇', '泳', '涌'], 'yong4': ['用'],
-  'you1': ['优', '忧', '幽'], 'you2': ['由', '游', '油', '犹'], 'you4': ['又', '右', '幼', '诱'], 'yu2': ['鱼', '于', '余', '愉', '渔'],
-  'yu3': ['雨', '语', '与', '羽'], 'yu4': ['遇', '育', '玉', '预', '域'], 'yuan2': ['元', '员', '原', '园', '圆'], 'yuan3': ['远'],
-  'yuan4': ['院', '愿', '怨'], 'yue1': ['约'], 'yun2': ['云', '匀'], 'yun4': ['运', '孕', '晕'], 'za2': ['杂'], 'zan2': ['咱'],
-  'zan4': ['暂', '赞'], 'zao3': ['早', '枣', '澡'], 'zao4': ['造', '燥', '躁'], 'ze2': ['则', '责', '择'], 'zhan3': ['展', '斩'],
-  'zhan4': ['战', '站', '占'], 'zhang1': ['张', '章'], 'zhang3': ['长', '掌', '涨'], 'zhang4': ['丈', '仗', '账'], 'zhao3': ['找', '沼'],
-  'zhao4': ['照', '赵', '罩'], 'zheng1': ['争', '征', '睁'], 'zheng3': ['整'], 'zheng4': ['正', '政', '证', '郑'], 'zhi2': ['直', '值', '职', '植'],
-  'zhi3': ['只', '指', '纸', '止'], 'zhi4': ['治', '制', '致', '至', '志'], 'zhou1': ['周', '州', '洲'], 'zhu3': ['主', '煮', '嘱'],
-  'zhu4': ['住', '助', '注', '祝', '著'], 'zhuan3': ['转'], 'zhuan4': ['赚', '传', '砖'], 'zhuang1': ['装', '庄', '妆'], 'zhuang4': ['状', '撞', '壮'],
-  'zhun3': ['准'], 'zhuo1': ['桌', '捉'], 'zi1': ['资', '姿', '滋'], 'zi3': ['子', '紫', '仔'], 'zong1': ['宗', '综'],
-  'zong3': ['总'], 'zou3': ['走'], 'zu2': ['足', '族', '祖'], 'zui4': ['最', '罪', '醉'], 'zuo2': ['昨'], 'zuo3': ['左']
-};
+
+// ======= 常用高频字扩充包  =======
+'ai4': ['爱', '碍', '艾', '唉'],
+'ba1': ['八', '吧', '巴', '扒'],
+'ba4': ['爸', '罢', '霸'],
+'bai2': ['白'],
+'bai3': ['百', '摆'],
+'ban4': ['半', '办', '伴', '扮'],
+'bao3': ['宝', '保', '饱'],
+'bei3': ['北'],
+'ben3': ['本'],
+'bi3': ['比', '笔', '彼'],
+'bie2': ['别'],
+'bing4': ['病', '并'],
+'bo1': ['波', '播', '拨'],
+'bu4': ['不', '部', '步', '布'],
+'cai2': ['才', '材', '财'],
+'cai3': ['采', '彩', '踩'],
+'cao3':['草'],
+'can1': ['参', '餐'],
+'chang2': ['长', '常', '场', '肠'],
+'che1': ['车'],
+'cheng2': ['成', '城', '程', '诚'],
+'chi1': ['吃'],
+'chu1': ['出', '初'],
+'chu3': ['处', '楚'],
+'chuan2': ['船', '传'],
+'ci3': ['此'],
+'cong2': ['从', '丛'],
+'cuo4': ['错', '措'],
+'da2': ['答', '达'],
+'da3': ['打'],
+'dai4': ['带', '代', '待', '戴'],
+'dan1': ['单', '担'],
+'dan4': ['但', '蛋', '淡'],
+'dao4': ['到', '道', '倒', '岛'],
+'de5': ['的', '得', '地'],
+'deng3': ['等'],
+'di1': ['低', '滴'],
+'di2': ['敌', '笛'],
+'di3': ['底', '抵'],
+'dian3': ['点', '典'],
+'dian4': ['电', '店', '殿'],
+'dong1': ['东', '冬'],
+'dong4': ['动', '洞', '冻'],
+'du1': ['读', '都', '督'],
+'du4': ['度', '渡', '肚'],
+'duan3': ['短'],
+'duan4': ['段', '断', '锻'],
+'dui4': ['对', '队'],
+'duo1': ['多'],
+'er2': ['儿', '而'],
+'er4': ['二'],
+'fa1': ['发'],
+'fan3': ['反', '返'],
+'fan4': ['饭', '犯', '范'],
+'fang1': ['方', '芳'],
+'fang2': ['房', '防', '妨'],
+'fang4': ['放'],
+'fei1': ['飞', '非'],
+'fen1': ['分', '芬'],
+'feng1': ['风', '封', '丰'],
+'fu2': ['服', '福', '扶'],
+'fu4': ['父', '付', '附', '负'],
+'gao1': ['高', '糕'],
+'gao4': ['告'],
+'ge1': ['歌', '哥', '割'],
+'gei3': ['给'],
+'gen1': ['跟', '根'],
+'geng4': ['更'],
+'gong1': ['工', '公', '功', '攻'],
+'gong4': ['共', '供'],
+'gou4': ['够', '构', '购'],
+'gu3': ['古', '股', '鼓'],
+'gu4': ['故', '顾', '固'],
+'guan1': ['关', '观', '官'],
+'guan3': ['管', '馆'],
+'guang1': ['光'],
+'gui1': ['归', '规'],
+'guo2': ['国'],
+'guo4': ['过', '果', '锅'],
+'hai2': ['还', '孩'],
+'hai3': ['海'],
+'han2': ['寒', '含', '韩'],
+'hao3': ['好'],
+'hao4': ['号', '浩'],
+'he2': ['和', '合', '河', '何'],
+'he1': ['喝', '呵'],
+'hei1': ['黑'],
+'hen3': ['很', '狠'],
+'hong2': ['红', '洪'],
+'hou4': ['后', '候', '厚'],
+'hu2': ['湖', '胡', '壶'],
+'hu4': ['户', '护', '互'],
+'hua1': ['花'],
+'hua4': ['话', '画', '化'],
+'huan1': ['欢'],
+'huan5': ['欢'], // 轻声，如“喜欢”
+'huan2': ['还', '环'],
+'huang2': ['黄', '皇'],
+'hui2': ['回'],
+'hui4': ['会', '汇', '惠'],
+'huo3': ['火', '伙'],
+'huo4': ['或', '货', '获'],
+'ji1': ['机', '基', '积', '击'],
+'ji2': ['及', '级', '极', '急'],
+'ji3': ['几', '己', '挤'],
+'ji4': ['记', '计', '技', '季'],
+'jia1': ['家', '加', '佳'],
+'jia3': ['假', '甲'],
+'jia4': ['价', '架', '驾'],
+'jian1': ['间', '坚', '尖', '肩'],
+'jian3': ['减', '简', '检'],
+'jian4': ['见', '件', '建', '健'],
+'jiang1': ['江', '将', '姜'],
+'jiang3': ['讲', '奖'],
+'jiao1': ['交', '教', '焦'],
+'jiao3': ['脚', '角', '饺'],
+'jiao4': ['叫', '较', '教'],
+'jie1': ['接', '街', '阶'],
+'jie2': ['节', '结', '杰'],
+'jie3': ['姐', '解'],
+'jie4': ['界', '介', '借', '戒'],
+'jin1': ['今', '金', '斤', '津'],
+'jin4': ['进', '近', '尽', '禁'],
+'jing1': ['经', '京', '惊', '精'],
+'jing3': ['井', '景', '警'],
+'jing4': ['静', '净', '竟', '境'],
+'jiu3': ['九', '久', '酒'],
+'jiu4': ['就', '旧', '救'],
+'ju2': ['局', '菊'],
+'ju3': ['举'],
+'ju4': ['句', '巨', '具', '剧'],
+'jue2': ['觉', '决', '绝'],
+'kai1': ['开'],
+'kan4': ['看'],
+'ke3': ['可'],
+'ke4': ['客', '课', '刻'],
+'kong1': ['空'],
+'kou3': ['口'],
+'ku3': ['苦'],
+'kuai4': ['快', '块'],
+'kuan1': ['宽'],
+'la1': ['拉'],
+'lai2': ['来'],
+'lan2': ['蓝', '兰', '栏'],
+'lao3': ['老'],
+'le5': ['了'],
+'lei4': ['累', '泪', '类'],
+'leng3': ['冷'],
+'li2': ['离', '梨', '黎'],
+'li3': ['里', '理', '李', '礼'],
+'li4': ['力', '立', '利', '历'],
+'lian2': ['连', '联', '怜'],
+'liang3': ['两'],
+'liang4': ['亮', '量', '辆'],
+'liao3': ['了'],
+'lin2': ['林', '临', '邻'],
+'ling2': ['零', '灵', '铃'],
+'liu2': ['流', '留', '刘'],
+'long2': ['龙', '隆'],
+'lu4': ['路', '露', '陆'],
+'lv3': ['旅', '铝'],
+'lv4': ['绿', '律', '虑'],
+'luo4': ['落', '洛', '络'],
+'ma1': ['妈', '抹'],
+'ma3': ['马', '码'],
+'ma5': ['吗', '嘛'],
+'mai3': ['买'],
+'mai4': ['卖', '麦'],
+'man3': ['满'],
+'man4': ['慢', '漫'],
+'mang2': ['忙', '盲'],
+'mao2': ['毛', '矛'],
+'mei2': ['没', '眉', '媒', '莓'],
+'mei3': ['美', '每'],
+'men2': ['门'],
+'men5': ['们'],
+'meng4': ['梦', '孟'],
+'mi3': ['米'],
+'mian4': ['面'],
+'min2': ['民'],
+'ming2': ['明', '名', '鸣'],
+'ming4': ['命'],
+'mo4': ['末', '莫', '墨'],
+'mu3': ['母'],
+'mu4': ['木', '目', '幕', '牧'],
+'na2': ['拿'],
+'na3': ['哪'],
+'na4': ['那', '纳'],
+'nan2': ['南', '男', '难'],
+'nan4': ['难'],
+'ne5': ['呢'],
+'nei4': ['内'],
+'neng2': ['能'],
+'ni3': ['你'],
+'nian2': ['年', '粘'],
+'nian4': ['念'],
+'niao3': ['鸟'],
+'nin2': ['您'],
+'niu2': ['牛'],
+'nong2': ['农', '浓'],
+'nv3': ['女'],
+'pai2': ['排', '牌'],
+'pang2': ['旁', '庞'],
+'pao3': ['跑'],
+'peng2': ['朋', '棚'],
+'pi2': ['皮', '疲'],
+'pian4': ['片', '骗'],
+'piao4': ['票', '漂'],
+'pin3': ['品'],
+'ping2': ['平', '苹', '评'],
+'po4': ['破', '迫'],
+'pu3': ['普', '谱'],
+'qi1': ['七', '期', '妻', '欺'],
+'qi2': ['其', '奇', '齐', '骑'],
+'qi3': ['起', '企', '启'],
+'qi4': ['气', '汽', '器', '弃'],
+'qian1': ['千', '牵', '迁', '签'],
+'qian2': ['前', '钱', '潜'],
+'qian3': ['浅', '遣'],
+'qiang2': ['强', '墙'],
+'qiao1': ['敲', '悄'],
+'qie4': ['切', '且'],
+'qin1': ['亲', '侵'],
+'qing1': ['轻', '清', '青'],
+'qing2': ['情', '晴'],
+'qing3': ['请', '顷'],
+'qiu2': ['求', '球', '秋'],
+'qu1': ['区', '曲', '驱'],
+'qu3': ['取', '曲'],
+'qu4': ['去', '趣'],
+'quan2': ['全', '权', '泉'],
+'que4': ['却', '确', '缺'],
+'ran2': ['然', '燃'],
+'rang4': ['让'],
+'re4': ['热'],
+'ren2': ['人'],
+'ren4': ['认', '任', '刃'],
+'ri4': ['日'],
+'rong2': ['容', '荣', '融'],
+'rou4': ['肉'],
+'ru2': ['如'],
+'ru4': ['入'],
+'san1': ['三'],
+'se4': ['色', '涩'],
+'sha1': ['沙', '杀'],
+'shan1': ['山', '删', '衫'],
+'shang1': ['商', '伤'],
+'shang4': ['上', '尚'],
+'shao3': ['少'],
+'she4': ['设', '社', '射'],
+'shen1': ['身', '深', '伸'],
+'shen2': ['神', '什'],
+'shen4': ['甚', '渗'],
+'sheng1': ['声', '生', '升'],
+'sheng4': ['胜', '圣', '剩'],
+'shi1': ['师', '失', '诗', '施'],
+'shi2': ['时', '十', '实', '识'],
+'shi3': ['使', '史', '始'],
+'shi4': ['是', '事', '市', '世', '式'],
+'shou1': ['收'],
+'shou3': ['手', '首', '守'],
+'shou4': ['受', '授', '售'],
+'shu1': ['书', '输', '舒'],
+'shu3': ['数', '属', '鼠'],
+'shu4': ['树', '数', '术', '束'],
+'shui3': ['水'],
+'shui4': ['睡', '税'],
+'shuo1': ['说'],
+'si1': ['思', '丝', '私'],
+'si3': ['死'],
+'si4': ['四', '似', '寺'],
+'song4': ['送', '宋', '松'],
+'su4': ['速', '素', '诉'],
+'suan4': ['算', '酸'],
+'sui1': ['虽'],
+'sui2': ['随'],
+'sui4': ['岁', '碎'],
+'sun1': ['孙'],
+'suo3': ['所', '锁', '索'],
+'ta1': ['他', '她', '它'],
+'tai4': ['太', '态', '泰'],
+'tan2': ['谈', '弹', '坛'],
+'tang2': ['糖', '堂', '唐'],
+'tao2': ['逃', '桃', '陶'],
+'te4': ['特'],
+'ti2': ['提', '题', '蹄'],
+'ti3': ['体'],
+'tian1': ['天', '添'],
+'tian2': ['田', '甜', '填'],
+'tiao2': ['条', '调'],
+'ting1': ['听', '厅'],
+'ting2': ['停', '庭', '挺'],
+'tong1': ['通'],
+'tong2': ['同', '童', '铜'],
+'tou2': ['头', '投'],
+'tu2': ['图', '途', '徒'],
+'tu3': ['土', '吐'],
+'tuan2': ['团'],
+'tui1': ['推'],
+'tui4': ['退', '腿'],
+'wai4': ['外'],
+'wan2': ['完', '玩', '丸'],
+'wan3': ['晚', '碗', '挽'],
+'wan4': ['万'],
+'wang2': ['王', '亡'],
+'wang3': ['往', '网', '枉'],
+'wang4': ['忘', '望', '旺'],
+'wei2': ['为', '围', '维', '违'],
+'wei3': ['委', '伟', '尾'],
+'wei4': ['为', '位', '未', '味'],
+'wen2': ['文', '闻', '蚊'],
+'wen3': ['稳', '吻'],
+'wen4': ['问'],
+'wo3': ['我'],
+'wu2': ['无', '吴', '屋'],
+'wu3': ['五', '午', '武', '舞'],
+'wu4': ['物', '务', '误', '雾'],
+'xi1': ['西', '吸', '希', '息'],
+'xi3': ['喜', '洗', '习'],
+'xi4': ['系', '细', '戏', '席'],
+'xia4': ['下', '夏', '吓'],
+'xian1': ['先', '鲜', '仙'],
+'xian2': ['闲', '贤', '弦'],
+'xian4': ['现', '线', '县', '限'],
+'xiang1': ['相', '香', '乡', '箱'],
+'xiang2': ['想', '祥', '详'],
+'xiang4': ['向', '项', '象', '像'],
+'xiao3': ['小', '晓'],
+'xiao4': ['笑', '校', '效'],
+'xie1': ['些', '歇', '协'],
+'xie3': ['写', '血'],
+'xie4': ['谢', '解', '械'],
+'xin1': ['心', '新', '辛', '欣'],
+'xin4': ['信'],
+'xing1': ['星', '兴', '猩'],
+'xing2': ['行', '形', '型'],
+'xing4': ['姓', '性', '幸'],
+'xiong1': ['兄', '胸', '凶'],
+'xiu1': ['休', '修', '羞'],
+'xu1': ['需', '须', '虚'],
+'xu3': ['许'],
+'xu4': ['续', '序', '叙'],
+'xuan3': ['选'],
+'xue2': ['学', '穴'],
+'xue3': ['雪'],
+'xun2': ['寻', '询', '巡'],
+'ya1': ['压', '呀', '押'],
+'ya3': ['雅'],
+'yan1': ['烟', '言', '研', '烟'],
+'yan2': ['严', '研', '盐', '颜'],
+'yan3': ['眼', '演', '掩'],
+'yan4': ['验', '燕', '宴'],
+'yang2': ['阳', '羊', '洋', '扬'],
+'yang3': ['养', '氧', '痒'],
+'yang4': ['样'],
+'yao4': ['要', '药', '耀'],
+'ye3': ['也', '野'],
+'ye4': ['夜', '业', '叶', '页'],
+'yi1': ['一', '衣', '医', '依'],
+'yi2': ['移', '疑', '仪', '姨'],
+'yi3': ['已', '以', '椅', '乙'],
+'yi4': ['意', '义', '议', '艺', '忆'],
+'yin1': ['因', '音', '阴', '姻'],
+'yin2': ['银', '吟', '引'],
+'yin3': ['引', '饮', '隐'],
+'yin4': ['印'],
+'ying1': ['应', '英', '鹰', '婴'],
+'ying2': ['迎', '赢', '营', '蝇'],
+'ying3': ['影'],
+'ying4': ['硬', '映', '应'],
+'yong3': ['永', '勇', '泳', '涌'],
+'yong4': ['用'],
+'you1': ['优', '忧', '幽'],
+'you2': ['由', '游', '油', '犹'],
+'you3': ['有', '友', '右'],
+'you4': ['又', '右', '幼', '诱'],
+'yu2': ['鱼', '于', '余', '愉', '渔'],
+'yu3': ['雨', '语', '与', '羽'],
+'yu4': ['遇', '育', '玉', '预', '域'],
+'yuan2': ['元', '员', '原', '园', '圆'],
+'yuan3': ['远'],
+'yuan4': ['院', '愿', '怨'],
+'yue1': ['约'],
+'yue4': ['月', '越', '阅', '跃'],
+'yun2': ['云', '匀'],
+'yun4': ['运', '孕', '晕'],
+'za2': ['杂'],
+'zai4': ['再', '在'],
+'zan2': ['咱'],
+'zan4': ['暂', '赞'],
+'zao3': ['早', '枣', '澡'],
+'zao4': ['造', '燥', '躁'],
+'ze2': ['则', '责', '择'],
+'zhan3': ['展', '斩'],
+'zhan4': ['战', '站', '占'],
+'zhang1': ['张', '章'],
+'zhang3': ['长', '掌', '涨'],
+'zhang4': ['丈', '仗', '账'],
+'zhao3': ['找', '沼'],
+'zhao4': ['照', '赵', '罩'],
+'zhe4': ['这', '着'],
+'zhen1': ['真', '珍', '针', '侦'],
+'zheng1': ['争', '征', '睁'],
+'zheng3': ['整'],
+'zheng4': ['正', '政', '证', '郑'],
+'zhi1': ['之', '知', '只', '支', '枝'],
+'zhi2': ['直', '值', '职', '植'],
+'zhi3': ['只', '指', '纸', '止'],
+'zhi4': ['治', '制', '致', '至', '志'],
+'zhong1': ['中', '终', '钟'],
+'zhong4': ['重', '众', '种'],
+'zhou1': ['周', '州', '洲'],
+'zhu3': ['主', '煮', '嘱'],
+'zhu4': ['住', '助', '注', '祝', '著'],
+'zhuan3': ['转'],
+'zhuan4': ['赚', '传', '砖'],
+'zhuang1': ['装', '庄', '妆'],
+'zhuang4': ['状', '撞', '壮'],
+'zhun3': ['准'],
+'zhuo1': ['桌', '捉'],
+'zi1': ['资', '姿', '滋'],
+'zi3': ['子', '紫', '仔'],
+'zi4': ['字', '自'],
+'zong1': ['宗', '综'],
+'zong3': ['总'],
+'zou3': ['走'],
+'zu2': ['足', '族', '祖'],
+'zui4': ['最', '罪', '醉'],
+'zuo2': ['昨'],
+'zuo3': ['左'],
+'zuo4': ['做', '作', '坐', '座']
+}
 
 let memoryBank = {};
 try { memoryBank = JSON.parse(localStorage.getItem('cryptoMemory') || '{}'); } catch(e) {}
@@ -221,6 +580,7 @@ function convertToShuangpin(pinyin) {
   else if (pinyin.startsWith('ch')) { initial = 'ch'; rest = pinyin.slice(2); }
   else if (pinyin.startsWith('sh')) { initial = 'sh'; rest = pinyin.slice(2); }
   else if ('bpmfdtnlgkhjqxrzcsyw'.includes(pinyin[0])) { initial = pinyin[0]; rest = pinyin.slice(1); }
+
   const mappedInitial = zrmInitialMap[initial] || '';
   let mappedVowel = rest;
   if (zrmVowelMap[rest]) mappedVowel = zrmVowelMap[rest];
@@ -285,6 +645,7 @@ let currentPinyinList = [];
 function decryptText() {
   let text = document.getElementById('inputText').value.trim();
   if (!text) { setStatus('请输入密文', 'error'); return; }
+
   let rawText = '';
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
@@ -292,9 +653,11 @@ function decryptText() {
     else if (reversePunctPlaceholder[ch]) rawText += reversePunctPlaceholder[ch];
     else rawText += ch;
   }
+
   const regex = /([a-z]{1,2})(→|↑|←|↓|\\)/g;
   let match, lastIndex = 0;
   currentPinyinList = [];
+
   while ((match = regex.exec(rawText)) !== null) {
     if (match.index > lastIndex) currentPinyinList.push({ type: 'raw', text: rawText.substring(lastIndex, match.index) });
     const pinyin = convertFromShuangpin(match[1]);
@@ -310,6 +673,7 @@ function decryptText() {
   while (i < currentPinyinList.length) {
     const item = currentPinyinList[i];
     if (item.type === 'raw') { finalChars.push({ type: 'raw', text: item.text }); i++; continue; }
+
     let decodedChar = ''; let isMemory = false; let currentPinyin = item.key; let matchedWord = false;
     for (let len = 4; len >= 2; len--) {
         if (i + len - 1 < currentPinyinList.length) {
@@ -328,12 +692,14 @@ function decryptText() {
         }
     }
     if (matchedWord) continue;
+
     let prevPinyin = (i > 0 && currentPinyinList[i-1].type === 'char') ? currentPinyinList[i-1].key : '';
     let nextPinyin = (i < currentPinyinList.length - 1 && currentPinyinList[i+1].type === 'char') ? currentPinyinList[i+1].key : '';
     const keyFull = `F:${prevPinyin}|${currentPinyin}|${nextPinyin}`;
     const keyPrev = `P:${prevPinyin}|${currentPinyin}`;
     const keyNext = `N:${currentPinyin}|${nextPinyin}`;
     const keySingle = `S:${currentPinyin}`;
+
     if (memoryBank[keyFull]) { decodedChar = memoryBank[keyFull]; isMemory = true; }
     else if (memoryBank[keyPrev]) { decodedChar = memoryBank[keyPrev]; isMemory = true; }
     else if (memoryBank[keyNext]) { decodedChar = memoryBank[keyNext]; isMemory = true; }
@@ -383,17 +749,21 @@ function correctChar(span) {
   if (!userInput || userInput === currentChar) return;
   const inputChars = Array.from(userInput.trim());
   if (inputChars.length === 0) return;
+
   let availableChars = 0;
   for (let k = 0; k < inputChars.length; k++) {
       if (idx + k < currentPinyinList.length && currentPinyinList[idx + k].type === 'char') availableChars++;
       else break; 
   }
   if (availableChars < inputChars.length) { setStatus(`上下文不足以合并`, 'error'); return; }
+
   historyStack.push(JSON.parse(JSON.stringify(memoryBank)));
   if (historyStack.length > 30) historyStack.shift(); 
+
   let wordPinyin = '';
   for (let k = 0; k < inputChars.length; k++) { wordPinyin += (k > 0 ? '_' : '') + currentPinyinList[idx + k].key; }
   memoryBank[`W:${wordPinyin}`] = userInput;
+  
   if (inputChars.length === 1) {
       const pinyinKey = currentPinyinList[idx].key;
       let prevPinyin = (idx > 0 && currentPinyinList[idx-1].type === 'char') ? currentPinyinList[idx-1].key : '';
@@ -404,6 +774,7 @@ function correctChar(span) {
       memoryBank[`S:${pinyinKey}`] = userInput;
   }
   setStatus(`已记住搭配：${userInput}`, 'ok');
+
   const parent = span.parentElement;
   const allSpans = Array.from(parent.querySelectorAll('.clickable-char'));
   const currentSpanIdx = allSpans.indexOf(span);
@@ -500,9 +871,11 @@ function generateMagicArray() {
   }
   if (!cipherText) { setStatus('没有可生成的密文', 'error'); return; }
   if (cipherText.length > 120) { setStatus('密文过长，最多支持120个字符', 'error'); return; }
+
   const canvas = document.createElement('canvas'); canvas.width = 800; canvas.height = 800; const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#0a0a1a'; ctx.fillRect(0, 0, 800, 800);
   const cx = 400, cy = 400; const radiusStep = 45; const hexSize = 22;
+
   ctx.beginPath(); ctx.arc(cx, cy, 350, 0, 2 * Math.PI); ctx.strokeStyle = 'rgba(0, 229, 255, 0.2)'; ctx.lineWidth = 5; ctx.stroke();
   ctx.beginPath(); ctx.arc(cx, cy, 370, 0, 2 * Math.PI); ctx.strokeStyle = 'rgba(255, 51, 102, 0.2)'; ctx.lineWidth = 2; ctx.stroke();
   ctx.beginPath();
@@ -511,6 +884,7 @@ function generateMagicArray() {
       if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
   ctx.closePath(); ctx.strokeStyle = 'rgba(0, 229, 255, 0.3)'; ctx.stroke();
+
   let charIndex = 0; let ring = 1; const maxRings = 5;
   while (charIndex < cipherText.length && ring <= maxRings) {
     const hexCount = 6 * ring; const radius = ring * radiusStep;
@@ -563,12 +937,17 @@ function importMagicArray(event) {
   };
   reader.readAsDataURL(file);
 }
+// ==========================================
+// 8. 照片隐写术（LSB 最低有效位加密）
+// ==========================================
 
-// ================= 6. 照片隐写术 - 文字版 =================
+// 隐藏文字到照片
 function hideTextInImage(event) {
   const file = event.target.files[0];
   if (!file) return;
   setStatus('正在处理照片，请稍候...', 'ok');
+
+  // 提示用户输入要隐藏的文字（也可以从输入框获取）
   const secretText = prompt('请输入你想隐藏在照片里的文字（心得体会等）：', document.getElementById('inputText').value);
   if (!secretText) { setStatus('已取消隐藏文字', 'error'); return; }
 
@@ -577,352 +956,141 @@ function hideTextInImage(event) {
     const img = new Image();
     img.onload = function() {
       const canvas = document.createElement('canvas');
-      canvas.width = img.width; canvas.height = img.height;
+      canvas.width = img.width;
+      canvas.height = img.height;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0);
       
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
+      // 1. 将文字转为二进制
       const encoder = new TextEncoder();
       const textBytes = encoder.encode(secretText);
+      
+      // 2. 头部加上 4 字节的长度信息，方便解密时知道读多少位
       const lengthBytes = new Uint8Array(4);
       new DataView(lengthBytes.buffer).setUint32(0, textBytes.length, true);
-      const allBytes = new Uint8Array(4 + textBytes.length);
-      allBytes.set(lengthBytes, 0); allBytes.set(textBytes, 4);
+      
+      const allBytes = new Uint8Array(lengthBytes.length + textBytes.length);
+      allBytes.set(lengthBytes, 0);
+      allBytes.set(textBytes, lengthBytes.length);
 
       let bitString = '';
-      for (let i = 0; i < allBytes.length; i++) bitString += allBytes[i].toString(2).padStart(8, '0');
+      for (let i = 0; i < allBytes.length; i++) {
+        bitString += allBytes[i].toString(2).padStart(8, '0');
+      }
 
-      if (bitString.length > data.length) { setStatus('照片太小，无法容纳这么多文字！', 'error'); return; }
+      // 3. 检查照片容量是否足够
+      const maxBits = data.length; // 每个像素有4个通道(RGBA)，但我们只改RGB，留一个通道给透明度
+      if (bitString.length > maxBits) {
+        setStatus('照片太小，无法容纳这么多文字！请换一张更大的照片。', 'error');
+        return;
+      }
 
+      // 4. 将二进制写入像素的最后一位 (LSB)
       for (let i = 0; i < bitString.length; i++) {
+        // data 数组是 [R, G, B, A, R, G, B, A, ...]
+        // 我们只修改 R, G, B 三个通道，跳过 A (透明度)
+        const channelIndex = (i * 4) % 4; 
+        const dataIndex = Math.floor(i / 3) * 4 + (i % 3); 
+        // 上面这个索引计算有点绕，简单点写就是：
+        // 我们需要按顺序遍历像素，然后修改 R, G, B
+        // 为了方便，我们直接修改连续的 R, G, B 通道，跳过 Alpha
         const realIndex = Math.floor(i / 3) * 4 + (i % 3);
+        
+        // 将当前通道值的最后一位清零，然后加上我们藏进去的 bit
         data[realIndex] = (data[realIndex] & 254) | parseInt(bitString[i]);
       }
 
+      // 5. 将修改后的像素绘制回画布并导出为 PNG
       ctx.putImageData(imageData, 0, 0);
 
-      // 画标识 T
-      const markX = canvas.width - 30; const markY = canvas.height - 30;
-      ctx.beginPath(); ctx.arc(markX, markY, 15, 0, 2 * Math.PI);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.font = 'bold 18px sans-serif'; ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('T', markX, markY + 1);
+// ======= 👇 新增代码：在右下角画带圈的 T =======
+// 计算右下角坐标（留出 30 像素的边距）
+const markX = canvas.width - 30;
+const markY = canvas.height - 30;
 
-      const link = document.createElement('a');
-      link.download = `隐写照片_${Date.now()}.png`;
+ctx.beginPath();
+ctx.arc(markX, markY, 15, 0, 2 * Math.PI); // 画半径为 15 的圆
+ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'; // 白色线条，带一点点透明，融合得更好
+ctx.lineWidth = 2;
+ctx.stroke();
+
+// 写字母 T
+ctx.font = 'bold 18px sans-serif';
+ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
+ctx.fillText('T', markX, markY + 1); // +1 是为了视觉上垂直居中
+// ======= 👆 新增代码结束 =======
+
+  const link = document.createElement('a');
+      link.download = `隐写照片_${Date.now()}.png`; // 必须是 PNG！JPEG 压缩会毁掉数据
       link.href = canvas.toDataURL('image/png');
       link.click();
-      setStatus('照片生成成功！请务必通过【原图/文件】发送。', 'ok');
+      
+      setStatus('照片生成成功！请务必通过【原图/文件】发送给朋友。', 'ok');
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
 
+// 从照片提取文字
 function extractTextFromImage(event) {
   const file = event.target.files[0];
   if (!file) return;
   setStatus('正在解析照片，提取隐藏文字...', 'ok');
+
   const reader = new FileReader();
   reader.onload = function(e) {
     const img = new Image();
     img.onload = function() {
       const canvas = document.createElement('canvas');
-      canvas.width = img.width; canvas.height = img.height;
-      const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0);
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
+      // 1. 从像素中提取二进制位
       let bitString = '';
       for (let i = 0; i < data.length; i++) {
-        if (i % 4 === 3) continue;
+        const channelIndex = (i % 4);
+        if (channelIndex === 3) continue; // 跳过 Alpha 通道
         bitString += (data[i] & 1).toString(); 
       }
 
+      // 2. 读取前 32 位，获取文字长度
       if (bitString.length < 32) { setStatus('照片中未发现隐藏信息。', 'error'); return; }
       const lengthBits = bitString.slice(0, 32);
       const lengthBytes = new Uint8Array(4);
-      for (let i = 0; i < 4; i++) lengthBytes[i] = parseInt(lengthBits.slice(i * 8, (i + 1) * 8), 2);
+      for (let i = 0; i < 4; i++) {
+        lengthBytes[i] = parseInt(lengthBits.slice(i * 8, (i + 1) * 8), 2);
+      }
       const textLength = new DataView(lengthBytes.buffer).getUint32(0, true);
 
-      if (textLength <= 0 || textLength > 1000000) { setStatus('没有发现有效的隐藏文字，或图片已损坏。', 'error'); return; }
-
+      // 3. 根据长度读取文字数据
       const textBits = bitString.slice(32, 32 + textLength * 8);
-      if (textBits.length < textLength * 8) { setStatus('照片损坏，无法完整提取。', 'error'); return; }
+      if (textBits.length < textLength * 8) { setStatus('照片损坏或不完整，无法提取完整文字。', 'error'); return; }
       
       const textBytes = new Uint8Array(textLength);
-      for (let i = 0; i < textLength; i++) textBytes[i] = parseInt(textBits.slice(i * 8, (i + 1) * 8), 2);
+      for (let i = 0; i < textLength; i++) {
+        textBytes[i] = parseInt(textBits.slice(i * 8, (i + 1) * 8), 2);
+      }
 
+      // 4. 解码为字符串
       const decoder = new TextDecoder();
       const secretText = decoder.decode(textBytes);
+
+      // 5. 把提取出来的文字放到输入框里
       document.getElementById('inputText').value = secretText;
+      // 如果是加密过的文字，可以顺便调用解密。这里直接显示出来
       document.getElementById('outputText').innerText = secretText;
       setStatus('文字提取成功！已显示在结果框中。', 'ok');
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-// ================= 7. 照片隐写术 - 语音版 =================
-// ================= 7. 照片隐写术 - 语音版 (WAV重写版) =================
-let audioCtx = null;
-let scriptProcessor = null;
-let isRecording = false;
-let pcmBuffers = [];
-
-function startAudioStego(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const img = new Image();
-    img.onload = async function() {
-      const maxBytes = (img.width * img.height * 3) / 8;
-      if (maxBytes < 1024 * 100) { setStatus('这张照片太小了，装不下语音！请换一张大图。', 'error'); return; }
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        window.AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new AudioContext();
-        const source = audioCtx.createMediaStreamSource(stream);
-        
-        // 使用底层脚本节点收集音频数据
-        scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
-        pcmBuffers = [];
-        
-        scriptProcessor.onaudioprocess = function(e) {
-          if (!isRecording) return;
-          const channelData = e.inputBuffer.getChannelData(0);
-          // 复制一份数据存起来
-          pcmBuffers.push(new Float32Array(channelData));
-        };
-
-        source.connect(scriptProcessor);
-        scriptProcessor.connect(audioCtx.destination);
-        
-        isRecording = true;
-        setStatus('正在录音...（请对着麦克风说话）', 'ok');
-        
-        setTimeout(() => {
-            if (isRecording) {
-                if (confirm('正在录音中...\n点击【确定】停止录音并保存，点击【取消】放弃录音。')) {
-                    stopAndSaveRecording(img, stream);
-                } else {
-                    isRecording = false;
-                    stream.getTracks().forEach(track => track.stop());
-                    source.disconnect(); scriptProcessor.disconnect();
-                    setStatus('已取消录音', 'error');
-                }
-            }
-        }, 500);
-
-      } catch (err) {
-        setStatus('无法访问麦克风，请检查浏览器权限。', 'error');
-      }
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-function stopAndSaveRecording(img, stream) {
-  isRecording = false;
-  stream.getTracks().forEach(track => track.stop());
-  if (scriptProcessor) scriptProcessor.disconnect();
-  setStatus('正在处理录音...', 'ok');
-
-  // 合并录制的所有音频片段
-  let totalLength = 0;
-  for (let i = 0; i < pcmBuffers.length; i++) totalLength += pcmBuffers[i].length;
-  const mergedBuffer = new Float32Array(totalLength);
-  let offset = 0;
-  for (let i = 0; i < pcmBuffers.length; i++) {
-      mergedBuffer.set(pcmBuffers[i], offset);
-      offset += pcmBuffers[i].length;
-  }
-
-  // 为了减小体积，我们降采样到 16000Hz (电话音质)
-  const sampleRate = audioCtx.sampleRate;
-  const targetSampleRate = 16000;
-  const downsampleRatio = sampleRate / targetSampleRate;
-  const newLength = Math.floor(mergedBuffer.length / downsampleRatio);
-  const pcm16 = new Int16Array(newLength);
-  
-  for (let i = 0; i < newLength; i++) {
-      let sample = mergedBuffer[Math.floor(i * downsampleRatio)];
-      sample = Math.max(-1, Math.min(1, sample));
-      pcm16[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-  }
-
-  // 手动打包成标准 WAV 格式
-  const buffer = new ArrayBuffer(44 + pcm16.length * 2);
-  const view = new DataView(buffer);
-  
-  function writeString(view, offset, string) {
-      for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
-  }
-  
-  writeString(view, 0, 'RIFF');
-  view.setUint32(4, 36 + pcm16.length * 2, true);
-  writeString(view, 8, 'WAVE');
-  writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM 格式
-  view.setUint16(22, 1, true); // 单声道
-  view.setUint32(24, targetSampleRate, true);
-  view.setUint32(28, targetSampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(view, 36, 'data');
-  view.setUint32(40, pcm16.length * 2, true);
-  
-  for (let i = 0; i < pcm16.length; i++) {
-      view.setInt16(44 + i * 2, pcm16[i], true);
-  }
-
-  const wavBlob = new Blob([view], { type: 'audio/wav' });
-  
-  // 确认是否保存
-  if (confirm('录音完成！是否把这段声音藏进照片里？')) {
-      saveAudioToImage(img, wavBlob);
-  } else {
-      setStatus('已取消保存', 'ok');
-  }
-}
-
-function saveAudioToImage(img, audioBlob) {
-  setStatus('正在把语音写入照片，请稍候...', 'ok');
-  const canvas = document.createElement('canvas');
-  canvas.width = img.width; canvas.height = img.height;
-  const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0);
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const audioBuffer = e.target.result;
-    const audioBytes = new Uint8Array(audioBuffer);
-
-    const magic = new Uint8Array([65, 85, 68, 73]); // AUDI
-    const lengthBytes = new Uint8Array(4);
-    new DataView(lengthBytes.buffer).setUint32(0, audioBytes.length, true);
-    const fullBytes = new Uint8Array(8 + audioBytes.length);
-    fullBytes.set(magic, 0); fullBytes.set(lengthBytes, 4); fullBytes.set(audioBytes, 8);
-
-    let bitString = '';
-    for (let i = 0; i < fullBytes.length; i++) bitString += fullBytes[i].toString(2).padStart(8, '0');
-
-    if (bitString.length > data.length) { 
-        setStatus('语音太长，照片装不下！请换大图或录短一点。', 'error'); 
-        return; 
-    }
-
-    for (let i = 0; i < bitString.length; i++) {
-        const realIndex = Math.floor(i / 3) * 4 + (i % 3);
-        data[realIndex] = (data[realIndex] & 254) | parseInt(bitString[i]);
-    }
-
-    ctx.putImageData(imageData, 0, 0);
-
-    const markX = canvas.width - 30; const markY = canvas.height - 30;
-    ctx.beginPath(); ctx.arc(markX, markY, 15, 0, 2 * Math.PI);
-    ctx.strokeStyle = 'rgba(255, 215, 0, 0.9)'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.font = '16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('🎵', markX, markY);
-
-    const link = document.createElement('a');
-    link.download = `语音隐写照片_${Date.now()}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-    setStatus('语音已藏入照片！请务必发【原图】或【文件】。', 'ok');
-  };
-  reader.readAsArrayBuffer(audioBlob);
-}
-
-function extractAudioStego(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  setStatus('正在解析照片中的语音...', 'ok');
-
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const img = new Image();
-    img.onload = function() {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width; canvas.height = img.height;
-      const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-
-      let bitString = '';
-      for (let i = 0; i < data.length; i++) {
-        if (i % 4 === 3) continue; 
-        bitString += (data[i] & 1).toString(); 
-      }
-
-      // 打印调试信息到结果框
-      const debugOutput = document.getElementById('outputText');
-      let debugMsg = `图片尺寸: ${img.width}x${img.height}\n`;
-      debugMsg += `提取的总二进制位数: ${bitString.length}\n`;
-
-      if (bitString.length < 64) { 
-          debugOutput.innerText = debugMsg + `错误：图片数据太少，没有隐藏数据。`; 
-          setStatus('提取失败', 'error'); 
-          return; 
-      }
-
-      const magicBytes = new Uint8Array(4);
-      for (let i = 0; i < 4; i++) magicBytes[i] = parseInt(bitString.slice(i * 8, (i + 1) * 8), 2);
-
-      debugMsg += `文件头标志: ${magicBytes.join(',')} (如果是65,85,68,73则正确)\n`;
-
-      if (magicBytes[0] !== 65 || magicBytes[1] !== 85 || magicBytes[2] !== 68 || magicBytes[3] !== 73) {
-          debugOutput.innerText = debugMsg + `错误：这不是一段隐藏的语音（或者照片被压缩过，数据损坏了）。`;
-          setStatus('未发现语音数据', 'error');
-          return;
-      }
-
-      const lengthBytes = new Uint8Array(4);
-      for (let i = 0; i < 4; i++) lengthBytes[i] = parseInt(bitString.slice(32 + i * 8, 32 + (i + 1) * 8), 2);
-      const audioLength = new DataView(lengthBytes.buffer).getUint32(0, true);
-      
-      debugMsg += `解析出的音频长度: ${audioLength} 字节\n`;
-
-      if (audioLength <= 0 || audioLength > 5000000) {
-          debugOutput.innerText = debugMsg + `错误：音频长度异常，数据已损坏。`;
-          setStatus('音频数据损坏', 'error');
-          return;
-      }
-
-      const audioBytes = new Uint8Array(audioLength);
-      for (let i = 0; i < audioLength; i++) {
-          const byteString = bitString.slice(64 + i * 8, 64 + (i + 1) * 8);
-          if (byteString.length < 8) { 
-              debugOutput.innerText = debugMsg + `错误：读取到一半图片数据不够了。`;
-              setStatus('音频被截断', 'error');
-              return; 
-          }
-          audioBytes[i] = parseInt(byteString, 2);
-      }
-
-       // 【关键修复】用 audio/mp4 或 audio/webm 尝试播放，并提供下载按钮
-      const audioBlob = new Blob([audioBytes], { type: 'audio/wav' });
-      const audioUrl = URL.createObjectURL(audioBlob);
-      
-      const outputBox = document.getElementById('outputText');
-      outputBox.innerHTML = `
-        <div style="text-align: center; padding: 20px;">
-            <p style="color: #22c55e; font-weight: bold; font-size: 18px;">🎵 提取成功！找到一段隐秘的语音</p>
-            <audio controls src="${audioUrl}" style="width: 100%; margin-top: 10px;"></audio>
-            <p style="font-size: 12px; color: #94a3b8; margin-top: 15px;">如果上方无法播放，说明浏览器不支持该音频格式。请点击下方按钮下载：</p>
-            <a href="${audioUrl}" download="隐秘语音_${Date.now()}.webm" style="display: inline-block; margin-top: 10px; padding: 10px 20px; background: #0ea5e9; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">⬇️ 下载语音文件</a>
-        </div>
-      `;
-      setStatus('语音提取成功！请点击播放。', 'ok');
     };
     img.src = e.target.result;
   };
